@@ -5,18 +5,16 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.aiohttp_impl import SimpleRequestHandler
 import yt_dlp
 from aiohttp import web
 
 logging.basicConfig(level=logging.INFO)
 
-# ⚠️ SHU YERGA BOTFATHER BERGAN ENG OXIRGI YANGI TOKENNI QO'YING!
+# ⚠️ BOTFATHER BERGAN ENG OXIRGI YANGI TOKEN
 TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-
-# Render beradigan bepul domen manzili (avtomatik aniqlanadi)
-RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
 user_storage = {}
 
@@ -131,7 +129,7 @@ async def download_media(callback: CallbackQuery):
         logging.error(f"Yuklashda xato: {e}")
         await callback.message.edit_text(
             "❌ **Yuklashda xatolik yuz berdi!**\n"
-            "• Havola noto'g'ri yoki yopiq bo'lishi mumkin.\n"
+            "• Havola noto'g'ri yoki maxfiy bo'lishi mumkin.\n"
             "• Yoki video hajmi Telegram limiti (50MB) dan katta."
         )
     finally:
@@ -140,43 +138,30 @@ async def download_media(callback: CallbackQuery):
                 try: os.remove(f)
                 except: pass
 
-# Telegram'dan keladigan Webhook so'rovlarini qabul qilish
-async def handle_webhook(request):
-    try:
-        json_string = await request.text()
-        from aiogram.types import Update
-        import json
-        update = Update(**json.loads(json_string))
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        logging.error(f"Webhook xatosi: {e}")
-    return web.Response(text="OK")
+async def on_startup(app):
+    RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+    if RENDER_EXTERNAL_URL:
+        webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
+        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.set_webhook(webhook_url)
+        logging.info(f"Webhook o'rnatildi: {webhook_url}")
+    else:
+        logging.warning("RENDER_EXTERNAL_URL topilmadi!")
 
 async def handle_main(request):
     return web.Response(text="Bot is running smoothly on Webhook!")
 
-async def main():
+def main():
     app = web.Application()
-    app.router.add_post('/webhook', handle_webhook)
     app.router.add_get('/', handle_main)
     
-    runner = web.AppRunner(app)
-    await runner.setup()
+    # Aiogram so'rovlarini boshqarish uchun rasmiy handler
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+    
+    app.on_startup.append(on_startup)
+    
     port = int(os.environ.get('PORT', 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    
-    # Eski pollinglarni yoki tiqilib qolgan eski ulanishlarni Telegram serveridan uzib tashlash
-    await bot.delete_webhook(drop_pending_updates=True)
-    
-    # Agar Render URL mavjud bo'lsa, avtomat Webhook-ni o'rnatish
-    if RENDER_EXTERNAL_URL:
-        webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
-        await bot.set_webhook(webhook_url)
-        logging.info(f"Webhook muvaffaqiyatli o'rnatildi: {webhook_url}")
-    else:
-        logging.warning("RENDER_EXTERNAL_URL topilmadi, bot polling rejimida ishga tushadi.")
-        await dp.start_polling(bot)
+    web.run_app(app, host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
