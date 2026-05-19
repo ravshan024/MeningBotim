@@ -10,7 +10,7 @@ from aiohttp import web
 # Tizim loglarini kuzatish
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "8926119680:AAE1HqDgN42U1439hPw1iozphZuQcymEKcs"
+TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
