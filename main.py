@@ -17,18 +17,18 @@ dp = Dispatcher()
 # Foydalanuvchi ma'lumotlarini vaqtinchalik saqlash xotirasi
 user_storage = {}
 
-# 1. /start buyrug'i (Professional interfeys)
+# 1. /start buyrug'i
 @dp.message(F.text == "/start")
 async def send_welcome(message: Message):
     await message.reply(
         "👋 **Assalomu alaykum! Sifatli yuklovchi botga xush kelibsiz!**\n\n"
-        "🚀 **Bot nimalar qila oladi?**\n"
-        "📂 **Havola orqali:** YouTube yoki Instagram linkini tashlang va tugmalar orqali video (MP4) yoki audio (MP3) yuklab oling.\n"
+        "🚀 **Bot imkoniyatlari:**\n"
+        "📂 **Havola orqali:** YouTube yoki Instagram linkini tashlang, video (MP4) yoki audio yuklab oling.\n"
         "🎵 **Matn orqali:** Istalgan qo'shiq yoki xonanda nomini yozing, men uni qidirib topaman!"
     )
 
-# 2. Havolalarni aniqlash (YouTube, Instagram va boshqa har qanday linklar)
-@dp.message(F.text.startswith("http://") | F.text.startswith("https://") | F.text.contains("instagram.com") | F.text.contains("youtu"))
+# 2. Havolalarni aniqlash (YouTube va Instagram linklari uchun xatosiz filtr)
+@dp.message(F.text.startswith("http://") | F.text.startswith("https://"))
 async def process_link(message: Message):
     url = message.text
     user_id = message.from_user.id
@@ -37,7 +37,7 @@ async def process_link(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎬 Sifatli Video (MP4)", callback_data="get_video"),
-            InlineKeyboardButton(text="🎵 Tiniq MP3 Audio", callback_data="get_audio")
+            InlineKeyboardButton(text="🎵 Tiniq Audio", callback_data="get_audio")
         ]
     ])
     await message.reply("🎬 **Havola qabul qilindi.** Qaysi formatda yuklamoqchisiz?", reply_markup=keyboard)
@@ -67,7 +67,7 @@ async def download_media(callback: CallbackQuery):
     data = user_storage.get(user_id)
     
     if not data:
-        await callback.answer("❌ Seans muddati tugadi. Havola yoki matnni qayta yuboring.", show_alert=True)
+        await callback.answer("❌ Seans muddati tugadi. Qayta yuboring.", show_alert=True)
         return
         
     await callback.message.edit_text("⏳ **Jarayon boshlandi...** Server faylni tayyorlamoqda, iltimos kuting...")
@@ -76,10 +76,9 @@ async def download_media(callback: CallbackQuery):
     url = data["url"]
     unique_name = f"media_{uuid.uuid4().hex}"
     
-    # Render'da FFmpeg xatosi bermasligi uchun m4a formatidan foydalanamiz (barcha telefonlarda ideal ochiladi)
     if task_type == "get_video":
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',  # Barqaror MP4 format
+            'format': 'best[ext=mp4]/best',  # Render bepul rejasida eng barqaror format
             'outtmpl': f"{unique_name}.mp4",
             'quiet': True,
             'no_warnings': True,
@@ -87,7 +86,7 @@ async def download_media(callback: CallbackQuery):
         output_file = f"{unique_name}.mp4"
     else:
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',  # FFmpeg talab qilmaydigan eng yuqori sifatli audio format
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',  # FFmpeg talab qilmaydigan eng toza format
             'outtmpl': f"{unique_name}.%(ext)s",
             'quiet': True,
             'no_warnings': True,
@@ -95,7 +94,6 @@ async def download_media(callback: CallbackQuery):
         output_file = f"{unique_name}.m4a"
 
     try:
-        # 10-15 kishi ishlatsa ham bot qotib qolmasligi uchun asinxron oqim (Executor)
         loop = asyncio.get_event_loop()
         def run_dl():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -103,7 +101,6 @@ async def download_media(callback: CallbackQuery):
                 
         await loop.run_in_executor(None, run_dl)
         
-        # Agar yuklangan fayl formati m4a yoki mp3 bo'lsa, o'shani aniqlash
         actual_file = output_file
         if task_type == "get_audio" and not os.path.exists(actual_file):
             for f in os.listdir('.'):
@@ -130,10 +127,10 @@ async def download_media(callback: CallbackQuery):
         await callback.message.edit_text(
             "❌ **Yuklashda xatolik yuz berdi!**\n"
             "• Havola noto'g'ri bo'lishi mumkin.\n"
-            "• Yoki fayl hajmi Telegram ruxsat bergan limitdan (50MB+) katta."
+            "• Yoki fayl hajmi juda katta (50MB+)."
         )
     finally:
-        # Server to'lib qolmasligi va qotmasligi uchun keshni darhol tozalash
+        # Server to'lib qolmasligi uchun keshni tozalash
         for f in os.listdir('.'):
             if unique_name in f:
                 try: os.remove(f)
@@ -152,7 +149,6 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    # Tiqilib qolgan eski so'rovlarni tozalab, botni yangidan polling qilish
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
