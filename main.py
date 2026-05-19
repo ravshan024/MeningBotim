@@ -5,15 +5,14 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
 import yt_dlp
+from aiohttp import web
 
-# Loglarni yoqamiz
 logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.environ.get("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Vaqtinchalik xotira
 user_storage = {}
 
 @dp.message(F.text.startswith("http") | F.text.startswith("https"))
@@ -36,11 +35,10 @@ async def download_media(callback: CallbackQuery):
     url = user_storage.get(user_id)
     
     if not url:
-        await callback.answer("Havola topilmadi. Linkni qayta yuboring.", show_alert=True)
+        await callback.answer("Havola topilmadi. Qayta yuboring.", show_alert=True)
         return
         
-    await callback.message.edit_text("⏳ Jarayon boshlandi... Fayl yuklanmoqda...")
-    
+    await callback.message.edit_text("⏳ Jarayon boshlandi... Server yuklamoqda...")
     task_type = callback.data
     unique_name = f"media_{uuid.uuid4().hex}"
     
@@ -89,7 +87,7 @@ async def download_media(callback: CallbackQuery):
             raise FileNotFoundError()
             
     except Exception as e:
-        await callback.message.edit_text("❌ Yuklashda xatolik bo'ldi. Havola noto'g'ri yoki video juda og'ir.")
+        await callback.message.edit_text("❌ Yuklashda xatolik bo'ldi. Havola noto'g'ri yoki video juda og'ir (50MB+).")
     finally:
         if os.path.exists(output_file):
             try: os.remove(output_file)
@@ -99,7 +97,20 @@ async def download_media(callback: CallbackQuery):
                 try: os.remove(f)
                 except: pass
 
+# Render port so'raganda xato bermasligi uchun soxta veb-sahifa ochamiz
+async def handle(request):
+    return web.Response(text="Bot is active!")
+
 async def main():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # Render talab qiladigan portni avtomatik aniqlab ishga tushadi
+    port = int(os.environ.get('PORT', 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
