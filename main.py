@@ -9,7 +9,7 @@ from aiohttp import web
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "8926119680:AAE1HqDgN42U1439hPw1iozphZuQcymEKcs"
+TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -81,7 +81,7 @@ async def download_media(callback: CallbackQuery):
     if task_type == "get_video":
         ydl_opts = {
             **common_opts,
-            # FFmpeg talab qilmaydigan, video va ovozi birga bo'lgan tayyor formatni majburlaymiz
+            # FFmpeg (birlashtiruvchi) dasturisiz Renderda silliq ishlashi uchun yaxlit tayyor MP4 format buyrug'i
             'format': 'b[ext=mp4]/b', 
             'outtmpl': f"{unique_name}.mp4",
         }
@@ -102,7 +102,6 @@ async def download_media(callback: CallbackQuery):
                 
         await loop.run_in_executor(None, run_dl)
         
-        # Faylni kengaytmasidan qat'iy nazar qidirib topish
         actual_file = output_file
         if not os.path.exists(actual_file):
             for f in os.listdir('.'):
@@ -128,7 +127,7 @@ async def download_media(callback: CallbackQuery):
         logging.error(f"Yuklashda xato: {e}")
         await callback.message.edit_text(
             "❌ **Yuklashda xatolik yuz berdi!**\n"
-            "• Havola noto'g'ri yoki yopiq (private) bo'lishi mumkin.\n"
+            "• Havola noto'g'ri yoki yopiq bo'lishi mumkin.\n"
             "• Yoki video hajmi Telegram limiti (50MB) dan katta."
         )
     finally:
