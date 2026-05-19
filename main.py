@@ -1,7 +1,7 @@
 import os
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 from aiogram.filters import CommandStart
 import yt_dlp
 
@@ -13,10 +13,13 @@ dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("Instagram link yuboring")
+    await message.answer(
+        "Instagram link yuboring"
+    )
 
 
 def download_instagram(url):
+
     ydl_opts = {
         "outtmpl": "%(title)s.%(ext)s",
         "quiet": True,
@@ -24,7 +27,9 @@ def download_instagram(url):
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
         info = ydl.extract_info(url, download=True)
+
         file_path = ydl.prepare_filename(info)
 
     return file_path
@@ -36,10 +41,14 @@ async def downloader(message: Message):
     url = message.text
 
     if "instagram.com" not in url:
-        await message.answer("Faqat Instagram link")
+        await message.answer(
+            "Faqat Instagram link yuboring"
+        )
         return
 
-    msg = await message.answer("Yuklanmoqda...")
+    msg = await message.answer(
+        "Yuklanmoqda..."
+    )
 
     try:
 
@@ -54,26 +63,7 @@ async def downloader(message: Message):
         ext = file_path.split(".")[-1].lower()
 
         if ext == "mp4":
-            video = open(file_path, "rb")
-            await message.answer_video(video)
-            video.close()
 
-        else:
-            photo = open(file_path, "rb")
-            await message.answer_photo(photo)
-            photo.close()
+            video = FSInputFile(file_path)
 
-        os.remove(file_path)
-
-        await msg.delete()
-
-    except Exception as e:
-        await msg.edit_text(str(e))
-
-
-async def main():
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+            await message.answer
