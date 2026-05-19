@@ -13,9 +13,7 @@ dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer(
-        "Instagram link yuboring"
-    )
+    await message.answer("Instagram link yuboring")
 
 
 def download_instagram(url):
@@ -41,9 +39,11 @@ async def downloader(message: Message):
     url = message.text
 
     if "instagram.com" not in url:
+
         await message.answer(
             "Faqat Instagram link yuboring"
         )
+
         return
 
     msg = await message.answer(
@@ -66,4 +66,30 @@ async def downloader(message: Message):
 
             video = FSInputFile(file_path)
 
-            await message.answer
+            await message.answer_video(video)
+
+        else:
+
+            photo = FSInputFile(file_path)
+
+            await message.answer_photo(photo)
+
+        os.remove(file_path)
+
+        await msg.delete()
+
+    except Exception as e:
+
+        await msg.edit_text(
+            f"Xato: {e}"
+        )
+
+
+async def main():
+
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+
+    asyncio.run(main())
