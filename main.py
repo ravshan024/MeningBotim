@@ -1,3 +1,4 @@
+TOKEN = os.environ.get("8926119680:AAE1HqDgN42Ul439hPw1iozphZuQcymEKcs")
 import os
 import asyncio
 import uuid
