@@ -19,18 +19,27 @@ user_data = {}
 
 @dp.message(F.text == "/start")
 async def send_welcome(message: Message):
-    # Eng sodda salomlashish
-    await message.reply("👋 **Instagram yuklovchi botga xush kelibsiz!**\n\nLinkni yuboring, men uni darhol tayyorlab beraman.")
+    # Professional va aniq salomlashish xabari
+    await message.reply(
+        "👋 **Instagram Media Downloader**\n\n"
+        "Men Instagram'dan:\n"
+        "🎥 **Reels va Videolar**\n"
+        "📸 **Rasmlar**\n"
+        "📜 **Stories**\n"
+        "yuklab berishga ixtisoslashgan botman.\n\n"
+        "👉 **Ishni boshlash uchun shunchaki Instagram havolasini yuboring!**"
+    )
 
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
     user_id = message.from_user.id
     user_data[user_id] = message.text
     
+    # Tugma bilan ixcham javob
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 Yuklab olish", callback_data="download_insta")]
+        [InlineKeyboardButton(text="📥 Yuklab olishni boshlash", callback_data="download_insta")]
     ])
-    await message.reply("✅ **Havola qabul qilindi.**", reply_markup=keyboard)
+    await message.reply("✅ **Havola qabul qilindi.**\nMedia faylni tayyorlash uchun quyidagi tugmani bosing:", reply_markup=keyboard)
 
 @dp.callback_query(F.data == "download_insta")
 async def download_insta(callback: CallbackQuery):
@@ -38,10 +47,9 @@ async def download_insta(callback: CallbackQuery):
     url = user_data.get(user_id)
     
     if not url:
-        return await callback.answer("❌ Xatolik yuz berdi.")
+        return await callback.answer("❌ Havola topilmadi, qaytadan yuboring.")
 
-    # Javobni tozalash
-    await callback.message.edit_text("⏳ **Yuklanmoqda...**")
+    await callback.message.edit_text("⏳ **Server faylni tayyorlamoqda...**")
     
     unique_name = f"media_{uuid.uuid4().hex}"
     ydl_opts = {
@@ -64,13 +72,13 @@ async def download_insta(callback: CallbackQuery):
             ext = os.path.splitext(actual_file)[1].lower()
             
             if ext in ['.jpg', '.jpeg', '.png']:
-                await callback.message.answer_photo(photo=status_file)
+                await callback.message.answer_photo(photo=status_file, caption="✅ **Rasm tayyor!**")
             else:
-                await callback.message.answer_video(video=status_file)
+                await callback.message.answer_video(video=status_file, caption="✅ **Video tayyor!**")
             
             await callback.message.delete()
         else:
-            await callback.message.edit_text("❌ **Yuklab bo'lmadi.** Profil yopiq bo'lishi mumkin.")
+            await callback.message.edit_text("❌ **Yuklab bo'lmadi.** Profil yopiq (private) bo'lishi mumkin.")
     
     except Exception:
         await callback.message.edit_text("❌ **Xatolik yuz berdi.**")
@@ -80,6 +88,12 @@ async def download_insta(callback: CallbackQuery):
                 try: os.remove(f)
                 except: pass
 
+@dp.message(F.text & ~F.text.startswith("/"))
+async def alert_message(message: Message):
+    # Agar foydalanuvchi link yubormasa, bot uni yo'naltiradi
+    await message.reply("⚠️ **Iltimos, Instagram'dan havola (link) yuboring.**\nMen faqat Instagram kontentini yuklay olaman.")
+
+# Server sozlamalari
 async def start_server():
     app = web.Application()
     app.router.add_get('/', lambda r: web.Response(text="Bot is running!"))
