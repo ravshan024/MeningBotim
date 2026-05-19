@@ -2,9 +2,21 @@ import os
 import sqlite3
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, FSInputFile
+from aiogram.types import (
+    Message,
+    FSInputFile,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery
+)
 from aiogram.filters import CommandStart, Command
 import yt_dlp
+
+# =========================
+# CONFIG
+# =========================
 
 BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078
@@ -12,7 +24,9 @@ ADMIN_ID = 6489364078
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# =========================
 # DATABASE
+# =========================
 
 db = sqlite3.connect("users.db")
 sql = db.cursor()
@@ -25,8 +39,9 @@ CREATE TABLE IF NOT EXISTS users (
 
 db.commit()
 
-
+# =========================
 # SAVE USER
+# =========================
 
 def save_user(user_id):
 
@@ -46,8 +61,29 @@ def save_user(user_id):
 
         db.commit()
 
+# =========================
+# MENU
+# =========================
 
+menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(
+                text="📥 Instagram yuklash"
+            )
+        ],
+        [
+            KeyboardButton(
+                text="📊 Statistika"
+            )
+        ]
+    ],
+    resize_keyboard=True
+)
+
+# =========================
 # START
+# =========================
 
 @dp.message(CommandStart())
 async def start(message: Message):
@@ -59,24 +95,100 @@ async def start(message: Message):
     await bot.send_message(
         ADMIN_ID,
         f"""
-Yangi user
+🔥 Yangi user
 
-ID: {user.id}
-Name: {user.full_name}
-Username: @{user.username}
+🆔 ID: {user.id}
+👤 Name: {user.full_name}
+📛 Username: @{user.username}
 """
     )
 
     await message.answer(
-        "Instagram link yuboring"
+        """
+👋 Instagram Downloader Bot
+
+📥 Reels
+🖼 Rasm
+📺 Story
+🎬 Video
+🎵 MP3
+
+Instagram link yuboring.
+""",
+        reply_markup=menu
     )
 
+# =========================
+# STATS BUTTON
+# =========================
 
-# DOWNLOAD
+@dp.message(F.text == "📊 Statistika")
+async def statistics(message: Message):
 
-def download_instagram(url):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    sql.execute(
+        "SELECT COUNT(*) FROM users"
+    )
+
+    users = sql.fetchone()[0]
+
+    await message.answer(
+        f"""
+📊 Statistika
+
+👥 Userlar: {users}
+"""
+    )
+
+# =========================
+# LINK HANDLER
+# =========================
+
+@dp.message(F.text)
+async def get_link(message: Message):
+
+    url = message.text
+
+    if "instagram.com" not in url:
+
+        await message.answer(
+            "❌ Instagram link yuboring"
+        )
+
+        return
+
+    buttons = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🎬 Video",
+                    callback_data=f"video|{url}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎵 MP3",
+                    callback_data=f"mp3|{url}"
+                )
+            ]
+        ]
+    )
+
+    await message.answer(
+        "📥 Format tanlang",
+        reply_markup=buttons
+    )
+
+# =========================
+# DOWNLOAD VIDEO
+# =========================
+
+def download_video(url):
 
     ydl_opts = {
+        "format": "mp4",
         "outtmpl": "%(title)s.%(ext)s",
         "quiet": True,
         "noplaylist": True
@@ -84,68 +196,109 @@ def download_instagram(url):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
-        info = ydl.extract_info(url, download=True)
+        info = ydl.extract_info(
+            url,
+            download=True
+        )
 
         file_path = ydl.prepare_filename(info)
 
     return file_path
 
+# =========================
+# DOWNLOAD MP3
+# =========================
 
-# DOWNLOADER
+def download_mp3(url):
 
-@dp.message(F.text)
-async def downloader(message: Message):
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": "%(title)s.%(ext)s",
+        "quiet": True,
+        "noplaylist": True,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "320"
+        }]
+    }
 
-    url = message.text
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
-    if "instagram.com" not in url:
-
-        await message.answer(
-            "Faqat Instagram link yuboring"
+        info = ydl.extract_info(
+            url,
+            download=True
         )
 
-        return
+        title = info["title"]
 
-    msg = await message.answer(
-        "Yuklanmoqda..."
+        file_path = f"{title}.mp3"
+
+    return file_path
+
+# =========================
+# CALLBACKS
+# =========================
+
+@dp.callback_query()
+async def callbacks(call: CallbackQuery):
+
+    data = call.data.split("|")
+
+    action = data[0]
+    url = data[1]
+
+    await call.message.edit_text(
+        "⏳ Yuklanmoqda..."
     )
 
     try:
 
         loop = asyncio.get_event_loop()
 
-        file_path = await loop.run_in_executor(
-            None,
-            download_instagram,
-            url
-        )
+        # VIDEO
 
-        ext = file_path.split(".")[-1].lower()
+        if action == "video":
 
-        if ext == "mp4":
+            file_path = await loop.run_in_executor(
+                None,
+                download_video,
+                url
+            )
 
             video = FSInputFile(file_path)
 
-            await message.answer_video(video)
+            await call.message.answer_video(
+                video
+            )
 
-        else:
+        # MP3
 
-            photo = FSInputFile(file_path)
+        elif action == "mp3":
 
-            await message.answer_photo(photo)
+            file_path = await loop.run_in_executor(
+                None,
+                download_mp3,
+                url
+            )
+
+            audio = FSInputFile(file_path)
+
+            await call.message.answer_audio(
+                audio
+            )
 
         os.remove(file_path)
 
-        await msg.delete()
-
     except Exception as e:
 
-        await msg.edit_text(
-            f"Xato: {e}"
+        await call.message.answer(
+            f"❌ Xato:\n{e}"
         )
 
-
-# STATS
+# =========================
+# /stats
+# =========================
 
 @dp.message(Command("stats"))
 async def stats(message: Message):
@@ -160,11 +313,12 @@ async def stats(message: Message):
     users = sql.fetchone()[0]
 
     await message.answer(
-        f"Userlar soni: {users}"
+        f"👥 Userlar soni: {users}"
     )
 
-
-# BROADCAST
+# =========================
+# /broadcast
+# =========================
 
 @dp.message(Command("broadcast"))
 async def broadcast(message: Message):
@@ -200,16 +354,16 @@ async def broadcast(message: Message):
             pass
 
     await message.answer(
-        f"Yuborildi: {success}"
+        f"✅ Yuborildi: {success}"
     )
 
-
+# =========================
 # MAIN
+# =========================
 
 async def main():
 
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
 
