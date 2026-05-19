@@ -11,7 +11,7 @@ from aiohttp import web
 logging.basicConfig(level=logging.INFO)
 
 # ⚠️ BOTFATHER BERGAN ENG OXIRGI YANGI TOKEN
-TOKEN = "8926119680:AAE1HqDgN42U1439hPw1iozphZuQcymEKcs"
+TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
