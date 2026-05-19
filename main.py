@@ -116,9 +116,30 @@ async def download_media(callback: CallbackQuery):
                 except: pass
 
 async def main():
-    # Render ishga tushganda eski tiqilib qolgan so'rovlarni tozalab yuborish
+    # Kodingizning tepa qismlari o'zgarishsiz qoladi...
+
+async def main():
+    # Render port scan xatosini to'g'rilash uchun soxta port ochamiz
+    import asyncio
+    from aiohttp import web
+    
+    async def handle(request):
+        return web.Response(text="Bot is running!")
+        
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # Render yuboradigan portni o'qiydi yoki avtomatik 10000-portda ishlaydi
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 10000)))
+    await site.start()
+    
+    # Telegram botni ishga tushirish
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run
