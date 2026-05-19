@@ -1,4 +1,3 @@
-TOKEN = os.environ.get("8926119680:AAE1HqDgN42Ul439hPw1iozphZuQcymEKcs")
 import os
 import asyncio
 import uuid
@@ -10,14 +9,24 @@ from aiohttp import web
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = "8926119680:AAE1HqDgN42U1439hPw1iozphZuQcymEKcs"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 user_storage = {}
 
-# 1. Agar foydalanuvchi havola (link) yuborsa
-@dp.message(F.text.startswith("http") | F.text.startswith("https"))
+# 1. /start buyrug'i uchun maxsus qism (Musiqa deb o'ylab ketmasligi uchun)
+@dp.message(F.text == "/start")
+async def send_welcome(message: Message):
+    await message.reply(
+        "👋 Salom! Men YouTube va Instagram yuklovchi botman.\n\n"
+        "🎯 **Imkoniyatlarim:**\n"
+        "• Menga video havolasini (link) yuborsangiz, uni logotiplarsiz video (MP4) yoki MP3 qilib beraman.\n"
+        "• Shunchaki qo'shiq yoki xonanda nomini yozsangiz, sizga musiqasini topib beraman!"
+    )
+
+# 2. Agar foydalanuvchi havola (Link) yuborsa
+@dp.message(F.text.startswith("http://") | F.text.startswith("https://") | F.text.contains("instagram.com") | F.text.contains("youtu"))
 async def process_link(message: Message):
     url = message.text
     user_id = message.from_user.id
@@ -29,14 +38,13 @@ async def process_link(message: Message):
             InlineKeyboardButton(text="🎵 Tiniq MP3 Audio", callback_data="get_audio")
         ]
     ])
-    await message.reply("🎬 Havola aniqlandi. Formatni tanlang:", reply_markup=keyboard)
+    await message.reply("🎬 Havola aniqlandi! Quyidagi formatlardan birini tanlang:", reply_markup=keyboard)
 
-# 2. Agar foydalanuvchi qo'shiq nomi yoki xonandani yozsa (Matnli qidiruv)
-@dp.message(F.text)
+# 3. Agar foydalanuvchi oddiy matn yozsa (Qo'shiq qidirish)
+@dp.message(F.text & ~F.text.startswith("/"))
 async def process_search(message: Message):
     search_text = message.text
     user_id = message.from_user.id
-    # YouTube qidiruv formati: ytsearch1: so'z
     user_storage[user_id] = {"url": f"ytsearch1:{search_text}", "is_search": True}
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -45,8 +53,8 @@ async def process_search(message: Message):
         ]
     ])
     await message.reply(
-        f"🔍 \"{search_text}\" bo'yicha eng yaxshi musiqani topishga tayyorman.\n"
-        f"Yuklash uchun pastdagi tugmani bosing:", 
+        f"🔍 \"{search_text}\" bo'yicha musiqa qidirilmoqda...\n"
+        f"Yuklab olish uchun pastdagi tugmani bosing:", 
         reply_markup=keyboard
     )
 
@@ -56,10 +64,10 @@ async def download_media(callback: CallbackQuery):
     data = user_storage.get(user_id)
     
     if not data:
-        await callback.answer("Ma'lumot topilmadi. Qayta yozing.", show_alert=True)
+        await callback.answer("Xatolik! Ma'lumot topilmadi. Qayta urinib ko'ring.", show_alert=True)
         return
         
-    await callback.message.edit_text("⏳ So'rovingiz bajarilmoqda... Server qidirmoqda va yuklamoqda...")
+    await callback.message.edit_text("⏳ So'rovingiz bajarilmoqda... Server yuklamoqda, iltimos kuting...")
     
     task_type = callback.data
     url = data["url"]
@@ -67,11 +75,10 @@ async def download_media(callback: CallbackQuery):
     
     if task_type == "get_video":
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'best',  # Render bepul rejasida xato bermasligi uchun eng barqaror format
             'outtmpl': f"{unique_name}.mp4",
             'quiet': True,
             'no_warnings': True,
-            'postprocessor_args': ['-metadata', 'comment=', '-metadata', 'title=', '-metadata', 'author=', '-metadata', 'description='],
         }
         output_file = f"{unique_name}.mp4"
     else:
@@ -83,7 +90,7 @@ async def download_media(callback: CallbackQuery):
             'postpreprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '320', # Eng tiniq 320kbps format
+                'preferredquality': '320',
             }],
         }
         output_file = f"{unique_name}.mp3"
@@ -103,7 +110,7 @@ async def download_media(callback: CallbackQuery):
             if task_type == "get_video":
                 await callback.message.answer_video(video=status_file, caption="🎬 Videongiz tayyor!")
             else:
-                caption_text = "🎵 Qo'shiq nomi bo'yicha qidirib topildi!" if data["is_search"] else "🎵 Videodan MP3 ajratib olindi!"
+                caption_text = "🎵 Qo'shiq topildi!" if data["is_search"] else "🎵 Audio ajratib olindi!"
                 await callback.message.answer_audio(audio=status_file, caption=caption_text)
                 
             await callback.message.delete()
@@ -111,9 +118,9 @@ async def download_media(callback: CallbackQuery):
             raise FileNotFoundError()
             
     except Exception as e:
-        await callback.message.edit_text("❌ Xatolik! Bunday nomdagi musiqa topilmadi yoki juda katta (50MB+).")
+        logging.error(f"Yuklashda xato: {e}")
+        await callback.message.edit_text("❌ Yuklashda xatolik yuz berdi! Havola noto'g'ri yoki fayl hajmi juda katta (50MB+).")
     finally:
-        # Server to'lib qolmasligi uchun keshni tozalash
         if os.path.exists(output_file):
             try: os.remove(output_file)
             except: pass
@@ -122,7 +129,6 @@ async def download_media(callback: CallbackQuery):
                 try: os.remove(f)
                 except: pass
 
-# Render bepul rejadagi port scan xatosini davolash
 async def handle(request):
     return web.Response(text="Bot is active!")
 
