@@ -1,20 +1,78 @@
 import os
+import sqlite3
 import asyncio
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 import yt_dlp
 
 BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+ADMIN_ID = 6489364078
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# DATABASE
+
+db = sqlite3.connect("users.db")
+sql = db.cursor()
+
+sql.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY
+)
+""")
+
+db.commit()
+
+
+# SAVE USER
+
+def save_user(user_id):
+
+    sql.execute(
+        "SELECT * FROM users WHERE user_id=?",
+        (user_id,)
+    )
+
+    user = sql.fetchone()
+
+    if user is None:
+
+        sql.execute(
+            "INSERT INTO users VALUES (?)",
+            (user_id,)
+        )
+
+        db.commit()
+
+
+# START
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("Instagram link yuboring")
 
+    user = message.from_user
+
+    save_user(user.id)
+
+    await bot.send_message(
+        ADMIN_ID,
+        f"""
+Yangi user
+
+ID: {user.id}
+Name: {user.full_name}
+Username: @{user.username}
+"""
+    )
+
+    await message.answer(
+        "Instagram link yuboring"
+    )
+
+
+# DOWNLOAD
 
 def download_instagram(url):
 
@@ -32,6 +90,8 @@ def download_instagram(url):
 
     return file_path
 
+
+# DOWNLOADER
 
 @dp.message(F.text)
 async def downloader(message: Message):
@@ -84,6 +144,67 @@ async def downloader(message: Message):
             f"Xato: {e}"
         )
 
+
+# STATS
+
+@dp.message(Command("stats"))
+async def stats(message: Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    sql.execute(
+        "SELECT COUNT(*) FROM users"
+    )
+
+    users = sql.fetchone()[0]
+
+    await message.answer(
+        f"Userlar soni: {users}"
+    )
+
+
+# BROADCAST
+
+@dp.message(Command("broadcast"))
+async def broadcast(message: Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.replace(
+        "/broadcast ",
+        ""
+    )
+
+    sql.execute(
+        "SELECT user_id FROM users"
+    )
+
+    users = sql.fetchall()
+
+    success = 0
+
+    for user in users:
+
+        try:
+
+            await bot.send_message(
+                user[0],
+                text
+            )
+
+            success += 1
+
+        except:
+            pass
+
+    await message.answer(
+        f"Yuborildi: {success}"
+    )
+
+
+# MAIN
 
 async def main():
 
