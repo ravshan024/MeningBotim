@@ -15,11 +15,12 @@ dp = Dispatcher()
 
 user_storage = {}
 
+# 1. Agar foydalanuvchi havola (link) yuborsa
 @dp.message(F.text.startswith("http") | F.text.startswith("https"))
 async def process_link(message: Message):
     url = message.text
     user_id = message.from_user.id
-    user_storage[user_id] = url
+    user_storage[user_id] = {"url": url, "is_search": False}
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -27,19 +28,40 @@ async def process_link(message: Message):
             InlineKeyboardButton(text="🎵 Tiniq MP3 Audio", callback_data="get_audio")
         ]
     ])
-    await message.reply("Formatni tanlang:", reply_markup=keyboard)
+    await message.reply("🎬 Havola aniqlandi. Formatni tanlang:", reply_markup=keyboard)
+
+# 2. Agar foydalanuvchi qo'shiq nomi yoki xonandani yozsa (Matnli qidiruv)
+@dp.message(F.text)
+async def process_search(message: Message):
+    search_text = message.text
+    user_id = message.from_user.id
+    # YouTube qidiruv formati: ytsearch1: so'z
+    user_storage[user_id] = {"url": f"ytsearch1:{search_text}", "is_search": True}
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🎵 Musiqani yuklash (MP3)", callback_data="get_audio")
+        ]
+    ])
+    await message.reply(
+        f"🔍 \"{search_text}\" bo'yicha eng yaxshi musiqani topishga tayyorman.\n"
+        f"Yuklash uchun pastdagi tugmani bosing:", 
+        reply_markup=keyboard
+    )
 
 @dp.callback_query(F.data.in_(["get_video", "get_audio"]))
 async def download_media(callback: CallbackQuery):
     user_id = callback.from_user.id
-    url = user_storage.get(user_id)
+    data = user_storage.get(user_id)
     
-    if not url:
-        await callback.answer("Havola topilmadi. Qayta yuboring.", show_alert=True)
+    if not data:
+        await callback.answer("Ma'lumot topilmadi. Qayta yozing.", show_alert=True)
         return
         
-    await callback.message.edit_text("⏳ Jarayon boshlandi... Server yuklamoqda...")
+    await callback.message.edit_text("⏳ So'rovingiz bajarilmoqda... Server qidirmoqda va yuklamoqda...")
+    
     task_type = callback.data
+    url = data["url"]
     unique_name = f"media_{uuid.uuid4().hex}"
     
     if task_type == "get_video":
@@ -60,7 +82,7 @@ async def download_media(callback: CallbackQuery):
             'postpreprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '320',
+                'preferredquality': '320', # Eng tiniq 320kbps format
             }],
         }
         output_file = f"{unique_name}.mp3"
@@ -74,21 +96,23 @@ async def download_media(callback: CallbackQuery):
         await loop.run_in_executor(None, run_dl)
         
         if os.path.exists(output_file):
-            await callback.message.edit_text("🚀 Fayl tayyor! Telegramga yuklanmoqda...")
+            await callback.message.edit_text("🚀 Fayl tayyor! Telegramga yuborilmoqda...")
             status_file = FSInputFile(output_file)
             
             if task_type == "get_video":
                 await callback.message.answer_video(video=status_file, caption="🎬 Videongiz tayyor!")
             else:
-                await callback.message.answer_audio(audio=status_file, caption="🎵 Yuqori sifatli MP3!")
+                caption_text = "🎵 Qo'shiq nomi bo'yicha qidirib topildi!" if data["is_search"] else "🎵 Videodan MP3 ajratib olindi!"
+                await callback.message.answer_audio(audio=status_file, caption=caption_text)
                 
             await callback.message.delete()
         else:
             raise FileNotFoundError()
             
     except Exception as e:
-        await callback.message.edit_text("❌ Yuklashda xatolik bo'ldi. Havola noto'g'ri yoki video juda og'ir (50MB+).")
+        await callback.message.edit_text("❌ Xatolik! Bunday nomdagi musiqa topilmadi yoki juda katta (50MB+).")
     finally:
+        # Server to'lib qolmasligi uchun keshni tozalash
         if os.path.exists(output_file):
             try: os.remove(output_file)
             except: pass
@@ -97,7 +121,7 @@ async def download_media(callback: CallbackQuery):
                 try: os.remove(f)
                 except: pass
 
-# Render port so'raganda xato bermasligi uchun soxta veb-sahifa ochamiz
+# Render bepul rejadagi port scan xatosini davolash
 async def handle(request):
     return web.Response(text="Bot is active!")
 
@@ -106,7 +130,6 @@ async def main():
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Render talab qiladigan portni avtomatik aniqlab ishga tushadi
     port = int(os.environ.get('PORT', 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
