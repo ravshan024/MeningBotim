@@ -7,28 +7,24 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 import yt_dlp
 from aiohttp import web
 
-# Tizim loglarini kuzatish
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+TOKEN = "8926119680:AAE1HqDgN42U1439hPw1iozphZuQcymEKcs"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Foydalanuvchi ma'lumotlarini vaqtinchalik saqlash xotirasi
 user_storage = {}
 
-# 1. /start buyrug'i
 @dp.message(F.text == "/start")
 async def send_welcome(message: Message):
     await message.reply(
-        "👋 **Assalomu alaykum! Sifatli yuklovchi botga xush kelibsiz!**\n\n"
+        "👋 **Assalomu alaykum! Professional yuklovchi botga xush kelibsiz!**\n\n"
         "🚀 **Bot imkoniyatlari:**\n"
-        "📂 **Havola orqali:** YouTube yoki Instagram linkini tashlang, video (MP4) yoki audio yuklab oling.\n"
-        "🎵 **Matn orqali:** Istalgan qo'shiq yoki xonanda nomini yozing, men uni qidirib topaman!"
+        "📂 **Havola orqali:** YouTube yoki Instagram linkini tashlang.\n"
+        "🎵 **Matn orqali:** Istalgan qo'shiq nomini yozing, men uni topaman!"
     )
 
-# 2. Havolalarni aniqlash (YouTube va Instagram linklari uchun xatosiz filtr)
-@dp.message(F.text.startswith("http://") | F.text.startswith("https://"))
+@dp.message(F.text.startswith("http://") | F.text.startswith("https://") | F.text.contains("youtu") | F.text.contains("instagram"))
 async def process_link(message: Message):
     url = message.text
     user_id = message.from_user.id
@@ -37,12 +33,11 @@ async def process_link(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎬 Sifatli Video (MP4)", callback_data="get_video"),
-            InlineKeyboardButton(text="🎵 Tiniq Audio", callback_data="get_audio")
+            InlineKeyboardButton(text="🎵 Tiniq Audio (MP3)", callback_data="get_audio")
         ]
     ])
-    await message.reply("🎬 **Havola qabul qilindi.** Qaysi formatda yuklamoqchisiz?", reply_markup=keyboard)
+    await message.reply("🎬 **Havola aniqlandi.** Yuklash formatini tanlang:", reply_markup=keyboard)
 
-# 3. Matnli qidiruv (Faqat qo'shiq nomi yozilganda ishlaydi)
 @dp.message(F.text & ~F.text.startswith("/"))
 async def process_search(message: Message):
     search_text = message.text
@@ -60,7 +55,6 @@ async def process_search(message: Message):
         reply_markup=keyboard
     )
 
-# 4. Yuklash va qayta ishlash markazi
 @dp.callback_query(F.data.in_(["get_video", "get_audio"]))
 async def download_media(callback: CallbackQuery):
     user_id = callback.from_user.id
@@ -70,28 +64,35 @@ async def download_media(callback: CallbackQuery):
         await callback.answer("❌ Seans muddati tugadi. Qayta yuboring.", show_alert=True)
         return
         
-    await callback.message.edit_text("⏳ **Jarayon boshlandi...** Server faylni tayyorlamoqda, iltimos kuting...")
+    await callback.message.edit_text("⏳ **Jarayon boshlandi...** Server yuklamoqda, iltimos kuting...")
     
     task_type = callback.data
     url = data["url"]
     unique_name = f"media_{uuid.uuid4().hex}"
     
+    common_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+    }
+
     if task_type == "get_video":
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',  # Render bepul rejasida eng barqaror format
+            **common_opts,
+            # FFmpeg talab qilmaydigan, video va ovozi birga bo'lgan tayyor formatni majburlaymiz
+            'format': 'b[ext=mp4]/b', 
             'outtmpl': f"{unique_name}.mp4",
-            'quiet': True,
-            'no_warnings': True,
         }
         output_file = f"{unique_name}.mp4"
     else:
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',  # FFmpeg talab qilmaydigan eng toza format
+            **common_opts,
+            'format': 'ba/b',
             'outtmpl': f"{unique_name}.%(ext)s",
-            'quiet': True,
-            'no_warnings': True,
         }
-        output_file = f"{unique_name}.m4a"
+        output_file = f"{unique_name}.mp3"
 
     try:
         loop = asyncio.get_event_loop()
@@ -101,15 +102,16 @@ async def download_media(callback: CallbackQuery):
                 
         await loop.run_in_executor(None, run_dl)
         
+        # Faylni kengaytmasidan qat'iy nazar qidirib topish
         actual_file = output_file
-        if task_type == "get_audio" and not os.path.exists(actual_file):
+        if not os.path.exists(actual_file):
             for f in os.listdir('.'):
                 if unique_name in f:
                     actual_file = f
                     break
 
         if os.path.exists(actual_file):
-            await callback.message.edit_text("🚀 **Fayl muvaffaqiyatli yuklandi!** Telegramga yuborilmoqda...")
+            await callback.message.edit_text("🚀 **Fayl tayyor!** Telegramga yuborilmoqda...")
             status_file = FSInputFile(actual_file)
             
             if task_type == "get_video":
@@ -123,22 +125,20 @@ async def download_media(callback: CallbackQuery):
             raise FileNotFoundError()
             
     except Exception as e:
-        logging.error(f"Yuklashda xato yuz berdi: {e}")
+        logging.error(f"Yuklashda xato: {e}")
         await callback.message.edit_text(
             "❌ **Yuklashda xatolik yuz berdi!**\n"
-            "• Havola noto'g'ri bo'lishi mumkin.\n"
-            "• Yoki fayl hajmi juda katta (50MB+)."
+            "• Havola noto'g'ri yoki yopiq (private) bo'lishi mumkin.\n"
+            "• Yoki video hajmi Telegram limiti (50MB) dan katta."
         )
     finally:
-        # Server to'lib qolmasligi uchun keshni tozalash
         for f in os.listdir('.'):
             if unique_name in f:
                 try: os.remove(f)
                 except: pass
 
-# Render serverining "Port Scan" xatosini davolash (Soxta veb-sahifa)
 async def handle(request):
-    return web.Response(text="Bot is running smoothly!")
+    return web.Response(text="Bot is active!")
 
 async def main():
     app = web.Application()
