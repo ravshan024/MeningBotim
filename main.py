@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import asyncio
+from datetime import datetime
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
     Message,
@@ -12,11 +14,12 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import CommandStart, Command
+
 import yt_dlp
 
-# =========================
+# =====================================
 # CONFIG
-# =========================
+# =====================================
 
 BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078
@@ -24,139 +27,164 @@ ADMIN_ID = 6489364078
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# =========================
+# =====================================
 # DATABASE
-# =========================
+# =====================================
 
 db = sqlite3.connect("users.db")
 sql = db.cursor()
 
 sql.execute("""
 CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY
+    user_id INTEGER PRIMARY KEY,
+    full_name TEXT,
+    username TEXT,
+    join_date TEXT
 )
 """)
 
 db.commit()
 
-# =========================
+# =====================================
 # SAVE USER
-# =========================
+# =====================================
 
-def save_user(user_id):
+def save_user(user):
 
     sql.execute(
         "SELECT * FROM users WHERE user_id=?",
-        (user_id,)
+        (user.id,)
     )
 
-    user = sql.fetchone()
+    exists = sql.fetchone()
 
-    if user is None:
+    if exists is None:
+
+        join_date = datetime.now().strftime(
+            "%d.%m.%Y %H:%M"
+        )
 
         sql.execute(
-            "INSERT INTO users VALUES (?)",
-            (user_id,)
+            """
+            INSERT INTO users
+            (user_id, full_name, username, join_date)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                user.id,
+                user.full_name,
+                user.username,
+                join_date
+            )
         )
 
         db.commit()
 
-# =========================
+# =====================================
 # MENU
-# =========================
+# =====================================
 
-menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton(
-                text="📥 Instagram yuklash"
-            )
-        ],
-        [
-            KeyboardButton(
-                text="📊 Statistika"
-            )
-        ]
-    ],
-    resize_keyboard=True
-)
+def get_menu(user_id):
 
-# =========================
+    if user_id == ADMIN_ID:
+
+        menu = ReplyKeyboardMarkup(
+            keyboard=[
+                [
+                    KeyboardButton(
+                        text="📥 Instagram Yuklash"
+                    )
+                ],
+                [
+                    KeyboardButton(
+                        text="📊 Statistika"
+                    )
+                ]
+            ],
+            resize_keyboard=True
+        )
+
+    else:
+
+        menu = ReplyKeyboardMarkup(
+            keyboard=[
+                [
+                    KeyboardButton(
+                        text="📥 Instagram Yuklash"
+                    )
+                ]
+            ],
+            resize_keyboard=True
+        )
+
+    return menu
+
+# =====================================
 # START
-# =========================
+# =====================================
 
 @dp.message(CommandStart())
 async def start(message: Message):
 
     user = message.from_user
 
-    save_user(user.id)
-
-    await bot.send_message(
-        ADMIN_ID,
-        f"""
-🔥 Yangi user
-
-🆔 ID: {user.id}
-👤 Name: {user.full_name}
-📛 Username: @{user.username}
-"""
-    )
+    save_user(user)
 
     await message.answer(
         """
-👋 Instagram Downloader Bot
+🔥 Instagram Downloader Bot
 
-📥 Reels
-🖼 Rasm
-📺 Story
-🎬 Video
-🎵 MP3
+✅ Video
+✅ Reels
+✅ Post
+✅ Story
+✅ Rasm
+✅ MP3
 
-Instagram link yuboring.
+📥 Instagram link yuboring
 """,
-        reply_markup=menu
+        reply_markup=get_menu(user.id)
     )
 
-# =========================
+# =====================================
 # STATS BUTTON
-# =========================
+# =====================================
 
 @dp.message(F.text == "📊 Statistika")
-async def statistics(message: Message):
+async def stats_button(message: Message):
 
     if message.from_user.id != ADMIN_ID:
         return
 
     sql.execute(
-        "SELECT COUNT(*) FROM users"
+        "SELECT * FROM users"
     )
 
-    users = sql.fetchone()[0]
+    users = sql.fetchall()
 
-    await message.answer(
-        f"""
-📊 Statistika
+    text = f"👥 Userlar soni: {len(users)}\n\n"
 
-👥 Userlar: {users}
-"""
-    )
+    for user in users[-10:]:
 
-# =========================
-# LINK HANDLER
-# =========================
+        text += (
+            f"👤 {user[1]}\n"
+            f"📛 @{user[2]}\n"
+            f"🕒 {user[3]}\n"
+            f"🆔 {user[0]}\n\n"
+        )
+
+    await message.answer(text)
+
+# =====================================
+# DOWNLOAD MENU
+# =====================================
 
 @dp.message(F.text)
-async def get_link(message: Message):
+async def downloader(message: Message):
 
     url = message.text
 
     if "instagram.com" not in url:
-
-        await message.answer(
-            "❌ Instagram link yuboring"
-        )
-
         return
 
     buttons = InlineKeyboardMarkup(
@@ -181,9 +209,9 @@ async def get_link(message: Message):
         reply_markup=buttons
     )
 
-# =========================
-# DOWNLOAD VIDEO
-# =========================
+# =====================================
+# VIDEO DOWNLOAD
+# =====================================
 
 def download_video(url):
 
@@ -205,9 +233,9 @@ def download_video(url):
 
     return file_path
 
-# =========================
-# DOWNLOAD MP3
-# =========================
+# =====================================
+# MP3 DOWNLOAD
+# =====================================
 
 def download_mp3(url):
 
@@ -236,9 +264,9 @@ def download_mp3(url):
 
     return file_path
 
-# =========================
+# =====================================
 # CALLBACKS
-# =========================
+# =====================================
 
 @dp.callback_query()
 async def callbacks(call: CallbackQuery):
@@ -266,11 +294,23 @@ async def callbacks(call: CallbackQuery):
                 url
             )
 
-            video = FSInputFile(file_path)
+            ext = file_path.split(".")[-1].lower()
 
-            await call.message.answer_video(
-                video
-            )
+            if ext == "mp4":
+
+                video = FSInputFile(file_path)
+
+                await call.message.answer_video(
+                    video
+                )
+
+            else:
+
+                photo = FSInputFile(file_path)
+
+                await call.message.answer_photo(
+                    photo
+                )
 
         # MP3
 
@@ -288,7 +328,8 @@ async def callbacks(call: CallbackQuery):
                 audio
             )
 
-        os.remove(file_path)
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
     except Exception as e:
 
@@ -296,9 +337,9 @@ async def callbacks(call: CallbackQuery):
             f"❌ Xato:\n{e}"
         )
 
-# =========================
+# =====================================
 # /stats
-# =========================
+# =====================================
 
 @dp.message(Command("stats"))
 async def stats(message: Message):
@@ -307,18 +348,27 @@ async def stats(message: Message):
         return
 
     sql.execute(
-        "SELECT COUNT(*) FROM users"
+        "SELECT * FROM users"
     )
 
-    users = sql.fetchone()[0]
+    users = sql.fetchall()
 
-    await message.answer(
-        f"👥 Userlar soni: {users}"
-    )
+    text = f"👥 Userlar soni: {len(users)}\n\n"
 
-# =========================
-# /broadcast
-# =========================
+    for user in users[-10:]:
+
+        text += (
+            f"👤 {user[1]}\n"
+            f"📛 @{user[2]}\n"
+            f"🕒 {user[3]}\n"
+            f"🆔 {user[0]}\n\n"
+        )
+
+    await message.answer(text)
+
+# =====================================
+# BROADCAST
+# =====================================
 
 @dp.message(Command("broadcast"))
 async def broadcast(message: Message):
@@ -357,9 +407,9 @@ async def broadcast(message: Message):
         f"✅ Yuborildi: {success}"
     )
 
-# =========================
+# =====================================
 # MAIN
-# =========================
+# =====================================
 
 async def main():
 
