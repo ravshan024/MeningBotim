@@ -52,11 +52,14 @@ async def download_insta(callback: CallbackQuery):
     await callback.message.edit_text("⏳ **Server faylni tayyorlamoqda...**")
     
     unique_name = f"media_{uuid.uuid4().hex}"
-    ydl_opts = {
+        ydl_opts = {
         'format': 'best',
         'outtmpl': f"{unique_name}.%(ext)s",
         'quiet': True,
+        'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
+
 
     try:
         loop = asyncio.get_event_loop()
