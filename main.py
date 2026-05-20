@@ -10,20 +10,20 @@ from aiogram.types import (
     Message, FSInputFile,
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    CallbackQuery, InputMediaPhoto, InputMediaVideo,
+    CallbackQuery,
 )
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiohttp import web
 import yt_dlp
 
 # ── CONFIG ────────────────────────────────────────────────
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-ADMIN_ID  = int(os.environ.get("ADMIN_ID", "0"))
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8926119680:AAFrKDnlW8Fbe1IXoKESl1CTN8_QbxPDjIE")
+ADMIN_ID  = int(os.environ.get("ADMIN_ID", "6489364078"))
 PORT      = int(os.environ.get("PORT", 10000))
 DOWN_DIR  = "downloads"
 
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN muhit o'zgaruvchisi o'rnatilmagan!")
+    raise RuntimeError("BOT_TOKEN o'rnatilmagan!")
 
 os.makedirs(DOWN_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +48,6 @@ cur.execute("""
 """)
 con.commit()
 
-# ── YORDAMCHILAR ──────────────────────────────────────────
 def save_user(user):
     cur.execute("SELECT 1 FROM users WHERE user_id=?", (user.id,))
     if not cur.fetchone():
@@ -60,19 +59,8 @@ def save_user(user):
         )
         con.commit()
 
-def get_menu(user_id):
-    rows = [[KeyboardButton(text="ℹ️ Yordam")]]
-    if user_id == ADMIN_ID:
-        rows.append([KeyboardButton(text="📊 Statistika")])
-    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
-
-def store_url(url: str) -> str:
-    sid = uuid.uuid4().hex[:12]
-    url_cache[sid] = url
-    return sid
-
-# ── YT-DLP YUKLAB OLISH ───────────────────────────────────
-YDL_COMMON = {
+# ── YUKLAB OLISH ──────────────────────────────────────────
+YDL_BASE = {
     "quiet": True,
     "no_warnings": True,
     "noplaylist": True,
@@ -86,10 +74,11 @@ YDL_COMMON = {
     },
 }
 
-def download_video(url: str) -> list[str]:
-    uid  = uuid.uuid4().hex[:10]
+def dl_video(url: str) -> str:
+    uid = uuid.uuid4().hex[:10]
+    out = f"{DOWN_DIR}/{uid}.mp4"
     opts = {
-        **YDL_COMMON,
+        **YDL_BASE,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
         "merge_output_format": "mp4",
@@ -97,16 +86,34 @@ def download_video(url: str) -> list[str]:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         path = ydl.prepare_filename(info)
-        # merge bo'lganda ext mp4 bo'lishi shart
-        if not path.endswith(".mp4"):
-            path = f"{DOWN_DIR}/{uid}.mp4"
-    return [path] if os.path.exists(path) else []
+        if not os.path.exists(path):
+            path = out
+    return path
 
-def download_mp3(url: str) -> list[str]:
+def dl_photo(url: str) -> str:
+    uid = uuid.uuid4().hex[:10]
+    opts = {
+        **YDL_BASE,
+        "format": "best",
+        "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
+        "writethumbnail": True,
+        "skip_download": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        thumb = info.get("thumbnail", "")
+    # thumbnail ni yuklaymiz
+    import urllib.request
+    ext  = thumb.split("?")[0].rsplit(".", 1)[-1] or "jpg"
+    path = f"{DOWN_DIR}/{uid}.{ext}"
+    urllib.request.urlretrieve(thumb, path)
+    return path
+
+def dl_mp3(url: str) -> str:
     uid  = uuid.uuid4().hex[:10]
     path = f"{DOWN_DIR}/{uid}.mp3"
     opts = {
-        **YDL_COMMON,
+        **YDL_BASE,
         "format": "bestaudio/best",
         "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
         "postprocessors": [{
@@ -117,79 +124,63 @@ def download_mp3(url: str) -> list[str]:
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.extract_info(url, download=True)
-    return [path] if os.path.exists(path) else []
+    return path
+
+# ── MENU ──────────────────────────────────────────────────
+def menu(uid):
+    rows = [[KeyboardButton(text="ℹ️ Yordam")]]
+    if uid == ADMIN_ID:
+        rows.append([KeyboardButton(text="📊 Statistika")])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 # ── HANDLERLAR ────────────────────────────────────────────
 @dp.message(CommandStart())
-async def cmd_start(msg: Message):
+async def start(msg: Message):
     save_user(msg.from_user)
     await msg.answer(
         "🔥 <b>Instagram Downloader</b>\n\n"
-        "✅ Reels · Post · Video · Rasm · MP3\n\n"
         "📥 Instagram linkini yuboring:",
         parse_mode="HTML",
-        reply_markup=get_menu(msg.from_user.id)
+        reply_markup=menu(msg.from_user.id)
     )
 
 @dp.message(F.text == "ℹ️ Yordam")
-async def cmd_help(msg: Message):
+async def help_cmd(msg: Message):
     await msg.answer(
-        "📌 <b>Foydalanish</b>\n\n"
-        "1. Instagram linkini nusxalang\n"
-        "2. Botga yuboring\n"
-        "3. Video yoki MP3 tanlang\n\n"
-        "<b>Ishlaydi:</b>\n"
-        "• instagram.com/reel/...\n"
-        "• instagram.com/p/...\n"
-        "• instagram.com/tv/...",
-        parse_mode="HTML"
+        "📌 Instagram linkini yuboring\n\n"
+        "Keyin format tanlang:\n"
+        "🎬 Video · 🖼 Rasm · 🎵 MP3"
     )
 
 @dp.message(F.text == "📊 Statistika")
-@dp.message(Command("stats"))
-async def cmd_stats(msg: Message):
+async def stats(msg: Message):
     if msg.from_user.id != ADMIN_ID:
         return
     cur.execute("SELECT * FROM users")
     users = cur.fetchall()
-    lines = "\n".join(
-        f"👤 {u[1]}  @{u[2]}  {u[3]}" for u in users[-20:]
-    )
-    await msg.answer(
-        f"👥 Jami: <b>{len(users)}</b> foydalanuvchi\n\n{lines}",
-        parse_mode="HTML"
-    )
-
-@dp.message(Command("broadcast"))
-async def cmd_broadcast(msg: Message):
-    if msg.from_user.id != ADMIN_ID:
-        return
-    text = msg.text.removeprefix("/broadcast").strip()
-    if not text:
-        return await msg.answer("❗ /broadcast <xabar>")
-    cur.execute("SELECT user_id FROM users")
-    ok = 0
-    for (uid,) in cur.fetchall():
-        try:
-            await bot.send_message(uid, text)
-            ok += 1
-        except Exception:
-            pass
-    await msg.answer(f"✅ {ok} ta foydalanuvchiga yuborildi")
+    text  = f"👥 Jami: <b>{len(users)}</b> foydalanuvchi\n\n"
+    for u in users[-15:]:
+        text += f"👤 {u[1]}  @{u[2]}  {u[3]}\n"
+    await msg.answer(text, parse_mode="HTML")
 
 @dp.message(F.text.contains("instagram.com"))
-async def handle_link(msg: Message):
+async def link(msg: Message):
+    save_user(msg.from_user)
     url = msg.text.strip()
-    sid = store_url(url)
+    sid = uuid.uuid4().hex[:12]
+    url_cache[sid] = url
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎬 Video", callback_data=f"v|{sid}")],
-        [InlineKeyboardButton(text="🎵 MP3",   callback_data=f"m|{sid}")],
+        [
+            InlineKeyboardButton(text="🎬 Video", callback_data=f"v|{sid}"),
+            InlineKeyboardButton(text="🖼 Rasm",  callback_data=f"p|{sid}"),
+            InlineKeyboardButton(text="🎵 MP3",   callback_data=f"m|{sid}"),
+        ],
         [InlineKeyboardButton(text="❌ Bekor", callback_data=f"c|{sid}")],
     ])
     await msg.answer("📥 Format tanlang:", reply_markup=kb)
 
 @dp.callback_query()
-async def handle_cb(call: CallbackQuery):
+async def callback(call: CallbackQuery):
     action, sid = call.data.split("|", 1)
 
     if action == "c":
@@ -204,25 +195,21 @@ async def handle_cb(call: CallbackQuery):
 
     await call.message.edit_text("⏳ Yuklanmoqda...")
 
-    files: list[str] = []
+    path = None
     try:
-        loop  = asyncio.get_event_loop()
-        fn    = download_mp3 if action == "m" else download_video
-        files = await loop.run_in_executor(None, fn, url)
+        loop = asyncio.get_event_loop()
 
-        if not files:
-            await call.message.edit_text("❌ Fayl topilmadi")
-            return
-
-        path = files[0]
-        if path.endswith(".mp4"):
+        if action == "v":
+            path = await loop.run_in_executor(None, dl_video, url)
             await call.message.answer_video(FSInputFile(path))
-        elif path.endswith(".mp3"):
-            await call.message.answer_audio(FSInputFile(path))
-        else:
+        elif action == "p":
+            path = await loop.run_in_executor(None, dl_photo, url)
             await call.message.answer_photo(FSInputFile(path))
+        elif action == "m":
+            path = await loop.run_in_executor(None, dl_mp3, url)
+            await call.message.answer_audio(FSInputFile(path))
 
-        await call.message.edit_text("✅ Yuklab olindi!")
+        await call.message.edit_text("✅ Tayyor!")
 
     except Exception as e:
         log.error(e)
@@ -231,14 +218,11 @@ async def handle_cb(call: CallbackQuery):
             parse_mode="HTML"
         )
     finally:
-        for f in files:
-            try:
-                os.remove(f)
-            except Exception:
-                pass
+        if path and os.path.exists(path):
+            os.remove(path)
         url_cache.pop(sid, None)
 
-# ── RENDER.COM UCHUN WEB SERVER ───────────────────────────
+# ── 24/7 UCHUN WEB SERVER ─────────────────────────────────
 async def health(request):
     return web.Response(text="OK")
 
@@ -247,9 +231,7 @@ async def run_web():
     app.router.add_get("/", health)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
-    log.info(f"Web server: 0.0.0.0:{PORT}")
+    await web.TCPSite(runner, "0.0.0.0", PORT).start()
 
 # ── MAIN ──────────────────────────────────────────────────
 async def main():
