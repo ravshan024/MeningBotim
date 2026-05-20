@@ -102,19 +102,20 @@ async def start(message: Message):
     
     save_user(message.from_user)
     
-        await message.answer(
+    # Mana shu yerda probellar (chekinishlar) aniq 4 ta bo'shliq bilan to'g'rilandi:
+    await message.answer(
         "👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", 
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")] # Statistika qo'shildi
+                [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")]
             ], 
             resize_keyboard=True
         )
     )
-
+    
     if is_new_user and user_id != ADMIN_ID:
-        # Yangi funksiyadan to'g'ri vaqtni olamiz
-        current_time = get_uzb_time()
+        tz_uzb = timezone(timedelta(hours=5))
+        current_time = datetime.now(tz_uzb).strftime("%d.%m.%Y %H:%M:%S")
         admin_msg = (
             f"🥳 <b>Yangi foydalanuvchi botni boshladi!</b>\n\n"
             f"👤 Ismi: {full_name}\n"
