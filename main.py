@@ -2,7 +2,7 @@ import os
 import sqlite3
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime  # <-- Import to'g'rilandi
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
@@ -14,9 +14,9 @@ import yt_dlp
 # SOZLAMALAR (CONFIG)
 # =====================================
 BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
-ADMIN_ID = 6489364078  # Sizning Telegram ID raqamingiz
+ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
-TG_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+TG_MAX_SIZE = 50 * 1024 * 1024  
 
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
@@ -66,14 +66,16 @@ async def send_file(chat_id, path):
             part_num = 1
             while chunk := f.read(part_size):
                 p_path = f"{path}_part{part_num}.mp4"
-                with open(p_path, "wb") as pf: pf.write(chunk)
+                # Sintaktik xato tuzatildi: alohida qatorga olindi
+                with open(p_path, "wb") as pf: 
+                    pf.write(chunk)
                 await bot.send_document(chat_id, document=FSInputFile(p_path), caption=f"Qism {part_num}")
                 os.remove(p_path)
                 part_num += 1
     os.remove(path)
 
 # =====================================
-# 1. START BUYRUG'I (XABAR BERISH SHU YERDA)
+# 1. START BUYRUG'I
 # =====================================
 @dp.message(CommandStart())
 async def start(message: Message):
@@ -81,20 +83,16 @@ async def start(message: Message):
     full_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
-    # Bazada bor yoki yo'qligini tekshirish
     sql.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     is_new_user = sql.fetchone() is None
     
-    # Bazaga saqlash
     save_user(message.from_user)
     
-    # Foydalanuvchiga javob berish
     await message.answer(
         "👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", 
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="ℹ️ Yordam")]], resize_keyboard=True)
     )
     
-    # 🔔 Yangi odam start bossa, ADMINGA xabar boradi:
     if is_new_user and user_id != ADMIN_ID:
         current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         admin_msg = (
@@ -110,7 +108,7 @@ async def start(message: Message):
             logging.error(f"Adminga start xabarini yuborishda xatolik: {e}")
 
 # =====================================
-# 2. LINK KELGANDA (FOYDALANISH VAQTI SHU YERDA)
+# 2. LINK KELGANDA
 # =====================================
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
@@ -118,7 +116,6 @@ async def handle_link(message: Message):
     user_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
-    # 🔔 Kimdir botdan foydalansa, ADMINGA xabar boradi:
     if message.from_user.id != ADMIN_ID:
         report_msg = (
             f"📥 <b>Botdan foydalanildi!</b>\n\n"
@@ -131,7 +128,6 @@ async def handle_link(message: Message):
         except Exception as e:
             logging.error(f"Adminga hisobot yuborishda xatolik: {e}")
 
-    # Yuklash jarayoni
     msg = await message.answer("⏳ Navbatga qo'shildi, yuklanmoqda...")
     try:
         loop = asyncio.get_event_loop()
@@ -156,3 +152,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+        
