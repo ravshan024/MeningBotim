@@ -2,7 +2,8 @@ import os
 import sqlite3
 import asyncio
 import logging
-from datetime import datetime  # <-- Import to'g'rilandi
+# timedelta qo'shildi, vaqtni surish uchun
+from datetime import datetime, timedelta  
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
@@ -13,7 +14,7 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-BOT_TOKEN = "8926119680:AAElC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
+BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
@@ -23,6 +24,13 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+# =====================================
+# O'ZBEKISTON VAQTINI HISOBLASH FUNKSIYASI
+# =====================================
+def get_uzb_time():
+    # Render vaqti (UTC) ga 5 soat qo'shib, aynan Toshkent vaqtini hosil qilamiz
+    return (datetime.utcnow() + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M:%S")
 
 # =====================================
 # MA'LUMOTLAR BAZASI (DATABASE)
@@ -35,7 +43,9 @@ db.commit()
 def save_user(user):
     sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
     if sql.fetchone() is None:
-        sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, datetime.now().strftime("%d.%m.%Y %H:%M")))
+        # Bazaga yozishda ham O'zbekiston vaqti ketadi
+        uzb_time_short = (datetime.utcnow() + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M")
+        sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time_short))
         db.commit()
 
 # =====================================
@@ -66,7 +76,6 @@ async def send_file(chat_id, path):
             part_num = 1
             while chunk := f.read(part_size):
                 p_path = f"{path}_part{part_num}.mp4"
-                # Sintaktik xato tuzatildi: alohida qatorga olindi
                 with open(p_path, "wb") as pf: 
                     pf.write(chunk)
                 await bot.send_document(chat_id, document=FSInputFile(p_path), caption=f"Qism {part_num}")
@@ -94,7 +103,8 @@ async def start(message: Message):
     )
     
     if is_new_user and user_id != ADMIN_ID:
-        current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        # Yangi funksiyadan to'g'ri vaqtni olamiz
+        current_time = get_uzb_time()
         admin_msg = (
             f"🥳 <b>Yangi foydalanuvchi botni boshladi!</b>\n\n"
             f"👤 Ismi: {full_name}\n"
@@ -112,7 +122,8 @@ async def start(message: Message):
 # =====================================
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
-    current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+    # Yangi funksiyadan to'g'ri vaqtni olamiz
+    current_time = get_uzb_time()
     user_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
