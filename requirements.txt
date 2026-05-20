@@ -1,4 +1,3 @@
-aiogram
+aiogram==3.7.0
+aiohttp==3.9.5
 yt-dlp
-aiohttp
-ffmpeg-python
