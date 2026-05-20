@@ -1,243 +1,157 @@
 import os
-import uuid
 import sqlite3
 import asyncio
 import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import (
-    Message, FSInputFile,
-    ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton,
-    CallbackQuery,
-)
+from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from aiohttp import web
 import yt_dlp
 
-# ── CONFIG ────────────────────────────────────────────────
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8926119680:AAElC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw")
-ADMIN_ID  = int(os.environ.get("ADMIN_ID", "6489364078"))
-PORT      = int(os.environ.get("PORT", 10000))
-DOWN_DIR  = "downloads"
+# =====================================
+# SOZLAMALAR (CONFIG)
+# =====================================
+BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+ADMIN_ID = 6489364078  # Sizning Telegram ID raqamingiz
+DOWNLOADS_DIR = "downloads"
+TG_MAX_SIZE = 50 * 1024 * 1024  # 50 MB
 
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN o'rnatilmagan!")
-
-os.makedirs(DOWN_DIR, exist_ok=True)
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
 
 bot = Bot(token=BOT_TOKEN)
-dp  = Dispatcher()
+dp = Dispatcher()
 
-# ── URL CACHE (64-bayt cheklov yechimi) ───────────────────
-url_cache: dict[str, str] = {}
-
-# ── DATABASE ──────────────────────────────────────────────
-con = sqlite3.connect("users.db")
-cur = con.cursor()
-cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id   INTEGER PRIMARY KEY,
-        full_name TEXT,
-        username  TEXT,
-        join_date TEXT
-    )
-""")
-con.commit()
+# =====================================
+# MA'LUMOTLAR BAZASI (DATABASE)
+# =====================================
+db = sqlite3.connect("users.db")
+sql = db.cursor()
+sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full_name TEXT, username TEXT, join_date TEXT)")
+db.commit()
 
 def save_user(user):
-    cur.execute("SELECT 1 FROM users WHERE user_id=?", (user.id,))
-    if not cur.fetchone():
-        cur.execute(
-            "INSERT INTO users VALUES (?,?,?,?)",
-            (user.id, user.full_name,
-             user.username or "—",
-             datetime.now().strftime("%d.%m.%Y %H:%M"))
-        )
-        con.commit()
+    sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
+    if sql.fetchone() is None:
+        sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, datetime.now().strftime("%d.%m.%Y %H:%M")))
+        db.commit()
 
-# ── YUKLAB OLISH ──────────────────────────────────────────
-YDL_BASE = {
-    "quiet": True,
-    "no_warnings": True,
-    "noplaylist": True,
-    "socket_timeout": 30,
-    "http_headers": {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
-    },
-}
-
-def dl_video(url: str) -> str:
-    uid = uuid.uuid4().hex[:10]
-    out = f"{DOWN_DIR}/{uid}.mp4"
-    opts = {
-        **YDL_BASE,
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
-        "merge_output_format": "mp4",
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        path = ydl.prepare_filename(info)
-        if not os.path.exists(path):
-            path = out
-    return path
-
-def dl_photo(url: str) -> str:
-    uid = uuid.uuid4().hex[:10]
-    opts = {
-        **YDL_BASE,
+# =====================================
+# YUKLOVCHI TIZIM (DOWNLOADER)
+# =====================================
+def download_insta(url):
+    options = {
+        "outtmpl": f"{DOWNLOADS_DIR}/%(id)s.%(ext)s",
+        "quiet": True,
         "format": "best",
-        "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
-        "writethumbnail": True,
-        "skip_download": True,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
+    with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=True)
-        thumb = info.get("thumbnail", "")
-    # thumbnail ni yuklaymiz
-    import urllib.request
-    ext  = thumb.split("?")[0].rsplit(".", 1)[-1] or "jpg"
-    path = f"{DOWN_DIR}/{uid}.{ext}"
-    urllib.request.urlretrieve(thumb, path)
-    return path
+        return ydl.prepare_filename(info)
 
-def dl_mp3(url: str) -> str:
-    uid  = uuid.uuid4().hex[:10]
-    path = f"{DOWN_DIR}/{uid}.mp3"
-    opts = {
-        **YDL_BASE,
-        "format": "bestaudio/best",
-        "outtmpl": f"{DOWN_DIR}/{uid}.%(ext)s",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }],
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.extract_info(url, download=True)
-    return path
+# =====================================
+# FAYLNI YUBORISH VA BO'LISH
+# =====================================
+async def send_file(chat_id, path):
+    size = os.path.getsize(path)
+    if size <= TG_MAX_SIZE:
+        await bot.send_video(chat_id, video=FSInputFile(path))
+    else:
+        await bot.send_message(chat_id, "⚠️ Fayl 50MB dan katta, qismlarga bo'linmoqda...")
+        part_size = 45 * 1024 * 1024
+        with open(path, "rb") as f:
+            part_num = 1
+            while chunk := f.read(part_size):
+                p_path = f"{path}_part{part_num}.mp4"
+                with open(p_path, "wb") as pf: pf.write(chunk)
+                await bot.send_document(chat_id, document=FSInputFile(p_path), caption=f"Qism {part_num}")
+                os.remove(p_path)
+                part_num += 1
+    os.remove(path)
 
-# ── MENU ──────────────────────────────────────────────────
-def menu(uid):
-    rows = [[KeyboardButton(text="ℹ️ Yordam")]]
-    if uid == ADMIN_ID:
-        rows.append([KeyboardButton(text="📊 Statistika")])
-    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
-
-# ── HANDLERLAR ────────────────────────────────────────────
+# =====================================
+# 1. START BUYRUG'I (XABAR BERISH SHU YERDA)
+# =====================================
 @dp.message(CommandStart())
-async def start(msg: Message):
-    save_user(msg.from_user)
-    await msg.answer(
-        "🔥 <b>Instagram Downloader</b>\n\n"
-        "📥 Instagram linkini yuboring:",
-        parse_mode="HTML",
-        reply_markup=menu(msg.from_user.id)
+async def start(message: Message):
+    user_id = message.from_user.id
+    full_name = message.from_user.full_name
+    username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
+    
+    # Bazada bor yoki yo'qligini tekshirish
+    sql.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    is_new_user = sql.fetchone() is None
+    
+    # Bazaga saqlash
+    save_user(message.from_user)
+    
+    # Foydalanuvchiga javob berish
+    await message.answer(
+        "👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", 
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="ℹ️ Yordam")]], resize_keyboard=True)
     )
+    
+    # 🔔 Yangi odam start bossa, ADMINGA xabar boradi:
+    if is_new_user and user_id != ADMIN_ID:
+        current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        admin_msg = (
+            f"🥳 <b>Yangi foydalanuvchi botni boshladi!</b>\n\n"
+            f"👤 Ismi: {full_name}\n"
+            f"Username: {username}\n"
+            f"🆔 ID: <code>{user_id}</code>\n"
+            f"🕒 <b>Vaqt:</b> {current_time}"
+        )
+        try:
+            await bot.send_message(chat_id=ADMIN_ID, text=admin_msg, parse_mode="HTML")
+        except Exception as e:
+            logging.error(f"Adminga start xabarini yuborishda xatolik: {e}")
 
-@dp.message(F.text == "ℹ️ Yordam")
-async def help_cmd(msg: Message):
-    await msg.answer(
-        "📌 Instagram linkini yuboring\n\n"
-        "Keyin format tanlang:\n"
-        "🎬 Video · 🖼 Rasm · 🎵 MP3"
-    )
-
-@dp.message(F.text == "📊 Statistika")
-async def stats(msg: Message):
-    if msg.from_user.id != ADMIN_ID:
-        return
-    cur.execute("SELECT * FROM users")
-    users = cur.fetchall()
-    text  = f"👥 Jami: <b>{len(users)}</b> foydalanuvchi\n\n"
-    for u in users[-15:]:
-        text += f"👤 {u[1]}  @{u[2]}  {u[3]}\n"
-    await msg.answer(text, parse_mode="HTML")
-
+# =====================================
+# 2. LINK KELGANDA (FOYDALANISH VAQTI SHU YERDA)
+# =====================================
 @dp.message(F.text.contains("instagram.com"))
-async def link(msg: Message):
-    save_user(msg.from_user)
-    url = msg.text.strip()
-    sid = uuid.uuid4().hex[:12]
-    url_cache[sid] = url
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🎬 Video", callback_data=f"v|{sid}"),
-            InlineKeyboardButton(text="🖼 Rasm",  callback_data=f"p|{sid}"),
-            InlineKeyboardButton(text="🎵 MP3",   callback_data=f"m|{sid}"),
-        ],
-        [InlineKeyboardButton(text="❌ Bekor", callback_data=f"c|{sid}")],
-    ])
-    await msg.answer("📥 Format tanlang:", reply_markup=kb)
+async def handle_link(message: Message):
+    current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+    user_name = message.from_user.full_name
+    username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
+    
+    # 🔔 Kimdir botdan foydalansa, ADMINGA xabar boradi:
+    if message.from_user.id != ADMIN_ID:
+        report_msg = (
+            f"📥 <b>Botdan foydalanildi!</b>\n\n"
+            f"👤 <b>Kim:</b> {user_name} ({username})\n"
+            f"🕒 <b>Vaqt:</b> {current_time}\n"
+            f"🔗 <b>Link:</b> {message.text}"
+        )
+        try:
+            await bot.send_message(chat_id=ADMIN_ID, text=report_msg, parse_mode="HTML", disable_web_page_preview=True)
+        except Exception as e:
+            logging.error(f"Adminga hisobot yuborishda xatolik: {e}")
 
-@dp.callback_query()
-async def callback(call: CallbackQuery):
-    action, sid = call.data.split("|", 1)
-
-    if action == "c":
-        url_cache.pop(sid, None)
-        await call.message.delete()
-        return
-
-    url = url_cache.get(sid)
-    if not url:
-        await call.answer("❗ Link eskirdi, qayta yuboring", show_alert=True)
-        return
-
-    await call.message.edit_text("⏳ Yuklanmoqda...")
-
-    path = None
+    # Yuklash jarayoni
+    msg = await message.answer("⏳ Navbatga qo'shildi, yuklanmoqda...")
     try:
         loop = asyncio.get_event_loop()
-
-        if action == "v":
-            path = await loop.run_in_executor(None, dl_video, url)
-            await call.message.answer_video(FSInputFile(path))
-        elif action == "p":
-            path = await loop.run_in_executor(None, dl_photo, url)
-            await call.message.answer_photo(FSInputFile(path))
-        elif action == "m":
-            path = await loop.run_in_executor(None, dl_mp3, url)
-            await call.message.answer_audio(FSInputFile(path))
-
-        await call.message.edit_text("✅ Tayyor!")
-
+        path = await loop.run_in_executor(None, download_insta, message.text)
+        await msg.edit_text("✅ Yuklandi! Yuborilmoqda...")
+        await send_file(message.chat.id, path)
+        await msg.delete()
     except Exception as e:
-        log.error(e)
-        await call.message.edit_text(
-            f"❌ Xato:\n<code>{str(e)[:300]}</code>",
-            parse_mode="HTML"
-        )
-    finally:
-        if path and os.path.exists(path):
-            os.remove(path)
-        url_cache.pop(sid, None)
+        await msg.edit_text(f"❌ Xato: {e}")
 
-# ── 24/7 UCHUN WEB SERVER ─────────────────────────────────
-async def health(request):
-    return web.Response(text="OK")
-
-async def run_web():
-    app = web.Application()
-    app.router.add_get("/", health)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
-
-# ── MAIN ──────────────────────────────────────────────────
+# =====================================
+# RENDER SERVER VA ISHGA TUSHIRISH
+# =====================================
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    await run_web()
-    log.info("Bot ishga tushdi ✅")
+    app = web.Application()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 10000)))
+    await site.start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
