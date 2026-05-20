@@ -1,7 +1,7 @@
 🚀 Tez Ishga Tushirish:
 bash
 pip install aiogram instagrapi
-export BOT_TOKEN="YOUR_TOKEN"
+export BOT_TOKEN="8926119680:AAFrKDnlW8Fbe1IXoKESl1CTN8_QbxPDjIE"
 export ADMIN_ID="6489364078"
 python bot.py
 
