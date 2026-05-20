@@ -14,7 +14,7 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+BOT_TOKEN = "8926119680:AAElC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
