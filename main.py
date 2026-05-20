@@ -3,7 +3,7 @@ import sqlite3
 import asyncio
 import logging
 # timedelta qo'shildi, vaqtni surish uchun
-from datetime import datetime, timedelta  
+from datetime import datetime, timezone, timedelta
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
