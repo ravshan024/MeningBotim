@@ -82,6 +82,19 @@ async def help_cmd(message: Message):
 # =====================================
 # RENDER SERVER
 # =====================================
+
+# ... yuqoridagi kodlar ...
+
+async def main():
+    # ### MUHIM QATOR:
+    # Bu qator boshqa joyda ishlab turgan barcha ulanishlarni uzib tashlaydi
+    # va botni faqat shu yerda, Render'da ishlashga majbur qiladi.
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Render uchun web server qismi
+    app = web.Application()
+    # ... qolgan kodlar ...
+
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     # Render uchun portni tinglash
