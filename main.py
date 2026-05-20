@@ -41,13 +41,18 @@ sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full
 db.commit()
 
 def save_user(user):
-    sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
-    if sql.fetchone() is None:
-        # Bazaga yozishda ham O'zbekiston vaqti ketadi
-        uzb_time_short = (datetime.utcnow() + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M")
-        sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time_short))
-        db.commit()
-
+    try:
+        sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
+        if sql.fetchone() is None:
+            # Toshkent vaqtini aniq hisoblab bazaga yozamiz
+            tz_uzb = timezone(timedelta(hours=5))
+            uzb_time = datetime.now(tz_uzb).strftime("%d.%m.%Y %H:%M")
+            
+            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time))
+            db.commit()
+    except Exception as e:
+        logging.error(f"Bazaga saqlashda xatolik: {e}")
+        
 # =====================================
 # YUKLOVCHI TIZIM (DOWNLOADER)
 # =====================================
