@@ -22,7 +22,7 @@ import yt_dlp
 # CONFIG
 # =====================================
 
-BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+BOT_TOKEN = "8926119680:AAFrKDnlW8Fbe1IXoKESl1CTN8_QbxPDjIE"
 ADMIN_ID = 6489364078
 DOWNLOADS_DIR = "downloads"
 
