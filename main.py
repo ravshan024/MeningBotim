@@ -2,8 +2,7 @@ import os
 import sqlite3
 import asyncio
 import logging
-# timedelta qo'shildi, vaqtni surish uchun
-from datetime import datetime, timezone, timedelta
+import datetime  # To'liq datetime import qilindi (eng xavfsiz yo'li)
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
@@ -14,7 +13,7 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-BOT_TOKEN = "8926119680:AAElC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
+BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
@@ -26,11 +25,14 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # =====================================
-# O'ZBEKISTON VAQTINI HISOBLASH FUNKSIYASI
+# O'ZBEKISTON VAQTINI OLISH FUNKSIYASI
 # =====================================
-def get_uzb_time():
-    # Render vaqti (UTC) ga 5 soat qo'shib, aynan Toshkent vaqtini hosil qilamiz
-    return (datetime.utcnow() + timedelta(hours=5)).strftime("%d.%m.%Y %H:%M:%S")
+def get_uzb_time(with_seconds=True):
+    # Server vaqtiga 5 soat qo'shib O'zbekiston vaqtini aniqlaymiz
+    tz = datetime.timezone(datetime.timedelta(hours=5))
+    if with_seconds:
+        return datetime.datetime.now(tz).strftime("%d.%m.%Y %H:%M:%S")
+    return datetime.datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
 # =====================================
 # MA'LUMOTLAR BAZASI (DATABASE)
@@ -44,15 +46,12 @@ def save_user(user):
     try:
         sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
         if sql.fetchone() is None:
-            # Toshkent vaqtini aniq hisoblab bazaga yozamiz
-            tz_uzb = timezone(timedelta(hours=5))
-            uzb_time = datetime.now(tz_uzb).strftime("%d.%m.%Y %H:%M")
-            
-            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time))
+            uzb_time_short = get_uzb_time(with_seconds=False)
+            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time_short))
             db.commit()
     except Exception as e:
         logging.error(f"Bazaga saqlashda xatolik: {e}")
-        
+
 # =====================================
 # YUKLOVCHI TIZIM (DOWNLOADER)
 # =====================================
@@ -102,20 +101,18 @@ async def start(message: Message):
     
     save_user(message.from_user)
     
-    # Mana shu yerda probellar (chekinishlar) aniq 4 ta bo'shliq bilan to'g'rilandi:
-    await message.answer(
-        "👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", 
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")]
-            ], 
-            resize_keyboard=True
-        )
+    # Tugmalar to'g'ri shaklda joylashtirildi
+    btn = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")]
+        ], 
+        resize_keyboard=True
     )
     
+    await message.answer("👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", reply_markup=btn)
+    
     if is_new_user and user_id != ADMIN_ID:
-        tz_uzb = timezone(timedelta(hours=5))
-        current_time = datetime.now(tz_uzb).strftime("%d.%m.%Y %H:%M:%S")
+        current_time = get_uzb_time(with_seconds=True)
         admin_msg = (
             f"🥳 <b>Yangi foydalanuvchi botni boshladi!</b>\n\n"
             f"👤 Ismi: {full_name}\n"
@@ -129,12 +126,26 @@ async def start(message: Message):
             logging.error(f"Adminga start xabarini yuborishda xatolik: {e}")
 
 # =====================================
-# 2. LINK KELGANDA
+# 2. STATISTIKA TUGMASI
+# =====================================
+@dp.message(F.text == "📊 Statistika")
+async def show_stats(message: Message):
+    if message.from_user.id == ADMIN_ID:
+        try:
+            sql.execute("SELECT COUNT(*) FROM users")
+            total_users = sql.fetchone()[0]
+            await message.answer(f"📊 <b>Bot statistikasi:</b>\n\n👤 Jami foydalanuvchilar: <b>{total_users} ta</b>", parse_mode="HTML")
+        except Exception as e:
+            await message.answer(f"❌ Statistikada xatolik: {e}")
+    else:
+        await message.answer("📥 Menga Instagram link yuboring, men uni yuklab beraman!")
+
+# =====================================
+# 3. LINK KELGANDA
 # =====================================
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
-    # Yangi funksiyadan to'g'ri vaqtni olamiz
-    current_time = get_uzb_time()
+    current_time = get_uzb_time(with_seconds=True)
     user_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
@@ -173,23 +184,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    # =====================================
-# STATISTIKA TUGMASI ISHLASHI
-# =====================================
-@dp.message(F.text == "📊 Statistika")
-async def show_stats(message: Message):
-    # Faqat siz (admin) ko'ra olishingiz uchun tekshiramiz
-    if message.from_user.id == ADMIN_ID:
-        try:
-            sql.execute("SELECT COUNT(*) FROM users")
-            total_users = sql.fetchone()[0]
-            
-            await message.answer(f"📊 <b>Bot statistikasi:</b>\n\n👤 Jami foydalanuvchilar: <b>{total_users} ta</b>", parse_mode="HTML")
-        except Exception as e:
-            await message.answer(f"❌ Statistikani hisoblashda xatolik: {e}")
-    else:
-        # Agar oddiy foydalanuvchi bossa, unga shunchaki havola yuborishni eslatadi
-        await message.answer("📥 Menga Instagram link yuboring, men uni yuklab beraman!")
-
     asyncio.run(main())
-        
