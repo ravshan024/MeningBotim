@@ -102,11 +102,16 @@ async def start(message: Message):
     
     save_user(message.from_user)
     
-    await message.answer(
+        await message.answer(
         "👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", 
-        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="ℹ️ Yordam")]], resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")] # Statistika qo'shildi
+            ], 
+            resize_keyboard=True
+        )
     )
-    
+
     if is_new_user and user_id != ADMIN_ID:
         # Yangi funksiyadan to'g'ri vaqtni olamiz
         current_time = get_uzb_time()
@@ -167,5 +172,23 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    # =====================================
+# STATISTIKA TUGMASI ISHLASHI
+# =====================================
+@dp.message(F.text == "📊 Statistika")
+async def show_stats(message: Message):
+    # Faqat siz (admin) ko'ra olishingiz uchun tekshiramiz
+    if message.from_user.id == ADMIN_ID:
+        try:
+            sql.execute("SELECT COUNT(*) FROM users")
+            total_users = sql.fetchone()[0]
+            
+            await message.answer(f"📊 <b>Bot statistikasi:</b>\n\n👤 Jami foydalanuvchilar: <b>{total_users} ta</b>", parse_mode="HTML")
+        except Exception as e:
+            await message.answer(f"❌ Statistikani hisoblashda xatolik: {e}")
+    else:
+        # Agar oddiy foydalanuvchi bossa, unga shunchaki havola yuborishni eslatadi
+        await message.answer("📥 Menga Instagram link yuboring, men uni yuklab beraman!")
+
     asyncio.run(main())
         
