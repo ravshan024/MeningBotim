@@ -1,22 +1,15 @@
-# 📸 Instagram Downloader Bot
+🚀 Tez Ishga Tushirish:
+bash
+pip install aiogram instagrapi
+export BOT_TOKEN="YOUR_TOKEN"
+export ADMIN_ID="6489364078"
+python bot.py
 
-> Instagram'dan post, Reels va hikoyalarni (Stories) tezkor yuklab olish uchun telegram bot.
-
----
-
-## ✨ Asosiy imkoniyatlar
-
-- 🚀 **Tezkor yuklash:** Instagram havolasini yuboring va darhol videoni qabul qilib oling.
-- 📦 **Katta fayllar:** 50 MB dan katta videolarni avtomatik tarzda qismlarga bo'lib yuboradi.
-- 📱 **Qulay interfeys:** Tugmalar yordamida boshqaruv.
-- 🛡️ **Xavfsizlik:** Ochiq profillardagi media fayllarni xatosiz yuklaydi.
-- ☁️ **Render tayyor:** Bot Render serverida uzluksiz ishlash uchun sozlangan.
-
----
-
-## 🛠️ O'rnatish tartibi
-
-### 1. Repozitoriyni klonlang
-```bash
-git clone [https://github.com/SizningUsername/BotNomi.git](https://github.com/SizningUsername/BotNomi.git)
-cd BotNomi
+🔑 Asosiy Xususiyatlar:
+Xususiyat	Tavsif
+Instagrapi	Instagram API orqali'ni yuklash
+Karusel	Albom / carousel post yuklashTahrirlash
+Hikoyalar	Hikoyalarni saqlash
+Tozalash	5 min dan eski fayllar avtomatik o'chiriladi
+50mb chegarasi	Telegramning chegarasiga moslanish
+Boshqaruv Paneli	Foydalanuvchi statistikasi
