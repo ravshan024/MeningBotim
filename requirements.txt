@@ -1,4 +1,5 @@
 aiogram
 yt-dlp
 aiohttp
-
+python-telegram-bot
+requests
