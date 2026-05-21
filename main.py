@@ -14,8 +14,7 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-# DIQQAT: Agar xato yana takrorlansa, @BotFather-dan yangi token olib shu yerga qo'ying!
-BOT_TOKEN = "8926119680:AAHySqTa6UqwZ8MteFsVGynHMtOCYAeV4zA"
+BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
@@ -44,8 +43,20 @@ def get_uzb_date():
 # =====================================
 db = sqlite3.connect("users.db")
 sql = db.cursor()
-sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full_name TEXT, username TEXT, join_date TEXT)")
 
+# Jadvalni ustunlar nomi bilan aniq yaratamiz
+sql.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY, 
+    full_name TEXT, 
+    username TEXT, 
+    join_date TEXT,
+    status TEXT DEFAULT 'bepul',
+    daily_count INTEGER DEFAULT 0,
+    last_active_date TEXT DEFAULT ''
+)""")
+
+# Agar eski baza mavjud bo'lsa va ustunlar yetishmasa, xavfsiz qo'shamiz
 try:
     sql.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'bepul'")
 except sqlite3.OperationalError:
@@ -62,14 +73,21 @@ db.commit()
 
 def save_user(user):
     try:
-        sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
+        sql.execute("SELECT user_id FROM users WHERE user_id=?", (user.id,))
         if sql.fetchone() is None:
             uzb_time_short = get_uzb_time(with_seconds=False)
             current_date = get_uzb_date()
-            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?, 'bepul', 0, ?)", (user.id, user.full_name, user.username, uzb_time_short, current_date))
+            # Ustunlar nomini aniq yozib, xatolikni oldini olamiz
+            sql.execute(
+                "INSERT INTO users (user_id, full_name, username, join_date, status, daily_count, last_active_date) VALUES (?, ?, ?, ?, 'bepul', 0, ?)", 
+                (user.id, user.full_name, user.username, uzb_time_short, current_date)
+            )
             db.commit()
+            return True # Yangi user qo'shildi
+        return False # Eski user
     except Exception as e:
         logging.error(f"Bazaga saqlashda xatolik: {e}")
+        return False
 
 def check_and_update_limit(user_id):
     current_date = get_uzb_date()
@@ -83,14 +101,17 @@ def check_and_update_limit(user_id):
     if status == 'premium':
         return True, "premium"
         
+    # Yangi kun kelgan bo'lsa limitni 1 qilib yangilaymiz
     if last_active_date != current_date:
         sql.execute("UPDATE users SET daily_count = 1, last_active_date = ? WHERE user_id = ?", (current_date, user_id))
         db.commit()
         return True, "bepul"
         
+    # Agar limit tugagan bo'lsa
     if daily_count >= 3:
         return False, "bepul"
         
+    # Aks holda limitni bittaga oshiramiz
     sql.execute("UPDATE users SET daily_count = daily_count + 1 WHERE user_id = ?", (user_id,))
     db.commit()
     return True, "bepul"
@@ -138,9 +159,8 @@ async def start(message: Message):
     full_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
-    sql.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    is_new_user = sql.fetchone() is None
-    save_user(message.from_user)
+    # save_user endi True yoki False qaytaradi, shu orqali dublikat oldi olinadi
+    is_new_user = save_user(message.from_user)
     
     btn = ReplyKeyboardMarkup(
         keyboard=[
@@ -151,6 +171,7 @@ async def start(message: Message):
     
     await message.answer("👋 Instagram downloader botiga xush kelibsiz!\n\nLink yuboring.", reply_markup=btn)
     
+    # Faqat rostdan ham yangi odam kirgandagina adminga xabar boradi
     if is_new_user and user_id != ADMIN_ID:
         current_time = get_uzb_time(with_seconds=True)
         admin_msg = (
@@ -299,4 +320,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
