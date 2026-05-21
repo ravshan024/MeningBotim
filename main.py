@@ -4,7 +4,6 @@ import asyncio
 import logging
 import datetime
 
-# Aiogram importlarini eng xavfsiz va toza holatga keltirdik
 import aiogram
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
@@ -15,7 +14,8 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-BOT_TOKEN = "8926119680:AAELC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
+# DIQQAT: Agar xato yana takrorlansa, @BotFather-dan yangi token olib shu yerga qo'ying!
+BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
@@ -46,7 +46,6 @@ db = sqlite3.connect("users.db")
 sql = db.cursor()
 sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full_name TEXT, username TEXT, join_date TEXT)")
 
-# Yangi ustunlarni tekshirib qo'shish
 try:
     sql.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'bepul'")
 except sqlite3.OperationalError:
@@ -218,7 +217,6 @@ async def send_premium_invoice(message: Message):
         parse_mode="HTML"
     )
     
-    # Import muammosini oldini olish uchun LabeledPrice'ni to'g'ridan-to'g'ri chaqiramiz
     price = aiogram.types.LabeledPrice(label="Premium 1 oy", amount=50)
     
     await message.answer_invoice(
@@ -301,3 +299,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
