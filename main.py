@@ -5,7 +5,7 @@ import logging
 import datetime  # To'liq datetime import qilindi (eng xavfsiz yo'li)
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, LabeledPrice, PreCheckoutQuery
 from aiogram.filters import CommandStart
 from aiohttp import web
 import yt_dlp
@@ -13,7 +13,7 @@ import yt_dlp
 # =====================================
 # SOZLAMALAR (CONFIG)
 # =====================================
-BOT_TOKEN = "8926119680:AAElC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
+BOT_TOKEN = "8926119680:AAELC7nnDwNvyTKOFqt7cGNGRYjAN8SYDSw"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
@@ -34,12 +34,24 @@ def get_uzb_time(with_seconds=True):
         return datetime.datetime.now(tz).strftime("%d.%m.%Y %H:%M:%S")
     return datetime.datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
+def get_uzb_date():
+    tz = datetime.timezone(datetime.timedelta(hours=5))
+    return datetime.datetime.now(tz).strftime("%d.%m.%Y")
+
 # =====================================
-# MA'LUMOTLAR BAZASI (DATABASE)
+# MA'LUMOTLAR BAZASI (DATABASE YANGILANDI)
 # =====================================
 db = sqlite3.connect("users.db")
 sql = db.cursor()
 sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full_name TEXT, username TEXT, join_date TEXT)")
+
+# Yangi ustunlarni bazaga xavfsiz qo'shish (agar oldin bo'lmasa)
+try:
+    sql.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'bepul'")
+    sql.execute("ALTER TABLE users ADD COLUMN daily_count INTEGER DEFAULT 0")
+    sql.execute("ALTER TABLE users ADD COLUMN last_active_date TEXT DEFAULT ''")
+except sqlite3.OperationalError:
+    pass # Ustunlar allaqachon mavjud bo'lsa xatoni o'tkazib yuboradi
 db.commit()
 
 def save_user(user):
@@ -47,13 +59,40 @@ def save_user(user):
         sql.execute("SELECT * FROM users WHERE user_id=?", (user.id,))
         if sql.fetchone() is None:
             uzb_time_short = get_uzb_time(with_seconds=False)
-            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user.id, user.full_name, user.username, uzb_time_short))
+            current_date = get_uzb_date()
+            sql.execute("INSERT INTO users VALUES (?, ?, ?, ?, 'bepul', 0, ?)", (user.id, user.full_name, user.username, uzb_time_short, current_date))
             db.commit()
     except Exception as e:
         logging.error(f"Bazaga saqlashda xatolik: {e}")
 
+def check_and_update_limit(user_id):
+    current_date = get_uzb_date()
+    sql.execute("SELECT status, daily_count, last_active_date FROM users WHERE user_id=?", (user_id,))
+    res = sql.fetchone()
+    
+    if not res:
+        return True, "bepul"
+        
+    status, daily_count, last_active_date = res
+    
+    if status == 'premium':
+        return True, "premium"
+        
+    # Yangi kun kelganda limitni yangilash
+    if last_active_date != current_date:
+        sql.execute("UPDATE users SET daily_count = 1, last_active_date = ? WHERE user_id = ?", (current_date, user_id))
+        db.commit()
+        return True, "bepul"
+        
+    if daily_count >= 3:
+        return False, "bepul"
+        
+    sql.execute("UPDATE users SET daily_count = daily_count + 1 WHERE user_id = ?", (user_id,))
+    db.commit()
+    return True, "bepul"
+
 # =====================================
-# YUKLOVCHI TIZIM (DOWNLOADER)
+# YUKLOVCHI TIZIM (ASL HOLIDA SAQLANDI)
 # =====================================
 def download_insta(url):
     options = {
@@ -67,12 +106,15 @@ def download_insta(url):
         return ydl.prepare_filename(info)
 
 # =====================================
-# FAYLNI YUBORISH VA BO'LISH
+# FAYLNI YUBORISH VA BO'LISH (REKLAMA QO'SHILDI)
 # =====================================
-async def send_file(chat_id, path):
+async def send_file(chat_id, path, is_premium=False):
     size = os.path.getsize(path)
+    # Tekin foydalanuvchiga reklama, premiumga esa toza yuboriladi
+    caption_text = "\n\n📥 @MeningBotim orqali yuklandi" if not is_premium else ""
+    
     if size <= TG_MAX_SIZE:
-        await bot.send_video(chat_id, video=FSInputFile(path))
+        await bot.send_video(chat_id, video=FSInputFile(path), caption=caption_text)
     else:
         await bot.send_message(chat_id, "⚠️ Fayl 50MB dan katta, qismlarga bo'linmoqda...")
         part_size = 45 * 1024 * 1024
@@ -82,7 +124,7 @@ async def send_file(chat_id, path):
                 p_path = f"{path}_part{part_num}.mp4"
                 with open(p_path, "wb") as pf: 
                     pf.write(chunk)
-                await bot.send_document(chat_id, document=FSInputFile(p_path), caption=f"Qism {part_num}")
+                await bot.send_document(chat_id, document=FSInputFile(p_path), caption=f"Qism {part_num}{caption_text}")
                 os.remove(p_path)
                 part_num += 1
     os.remove(path)
@@ -101,10 +143,9 @@ async def start(message: Message):
     
     save_user(message.from_user)
     
-    # Tugmalar to'g'ri shaklda joylashtirildi
     btn = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="ℹ️ Yordam")]
+            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="⭐ Premium sotib olish")]
         ], 
         resize_keyboard=True
     )
@@ -126,7 +167,7 @@ async def start(message: Message):
             logging.error(f"Adminga start xabarini yuborishda xatolik: {e}")
 
 # =====================================
-# 2. STATISTIKA TUGMASI
+# 2. STATISTIKA TUGMASI (KENGAYTIRILDI)
 # =====================================
 @dp.message(F.text == "📊 Statistika")
 async def show_stats(message: Message):
@@ -134,24 +175,97 @@ async def show_stats(message: Message):
         try:
             sql.execute("SELECT COUNT(*) FROM users")
             total_users = sql.fetchone()[0]
-            await message.answer(f"📊 <b>Bot statistikasi:</b>\n\n👤 Jami foydalanuvchilar: <b>{total_users} ta</b>", parse_mode="HTML")
+            
+            # Oxirgi qo'shilgan 10 ta foydalanuvchini vaqti va ismi bilan olish
+            sql.execute("SELECT full_name, username, join_date, status FROM users ORDER BY rowid DESC LIMIT 10")
+            recent_users = sql.fetchall()
+            
+            user_list = ""
+            for i, u in enumerate(recent_users, 1):
+                uname = u[1] if u[1] else "@mavjud_emas"
+                badge = "⭐" if u[3] == "premium" else "👤"
+                user_list += f"{i}. {badge} {u[0]} ({uname}) - 📅 {u[2]}\n"
+                
+            msg_text = (
+                f"📊 <b>Bot statistikasi:</b>\n\n"
+                f"👤 Jami foydalanuvchilar: <b>{total_users} ta</b>\n\n"
+                f"🕒 <b>Oxirgi 10 ta foydalanuvchi ro'yxati:</b>\n{user_list}"
+            )
+            await message.answer(msg_text, parse_mode="HTML")
         except Exception as e:
             await message.answer(f"❌ Statistikada xatolik: {e}")
     else:
-        await message.answer("📥 Menga Instagram link yuboring, men uni yuklab beraman!")
+        # Oddiy userlar uchun qolgan limiti ko'rsatiladi
+        sql.execute("SELECT status, daily_count FROM users WHERE user_id=?", (message.from_user.id,))
+        res = sql.fetchone()
+        status = res[0] if res else "bepul"
+        count = res[1] if res else 0
+        limit_val = "Cheksiz" if status == "premium" else f"{count}/3 ta"
+        
+        await message.answer(
+            f"👤 <b>Sizning hisobingiz statusi:</b> {status.upper()}\n"
+            f"📈 Bugun yuklangan videolar: {limit_val}"
+        )
 
 # =====================================
-# 3. LINK KELGANDA
+# ⭐ PREMIUM SOTIB OLISH (TELEGRAM STARS)
+# =====================================
+@dp.message(F.text == "⭐ Premium sotib olish")
+async def send_premium_invoice(message: Message):
+    await message.answer(
+        "⭐ <b>Premium obuna imkoniyatlari:</b>\n\n"
+        "⚡ <b>Tezkor yuklash:</b> Videolar navbatsiz va eng yuqori tezlikda yuklanadi.\n"
+        "🚫 <b>Reklamasiz:</b> Videolar ostida bot reklamalari bo'lmaydi.\n"
+        "♾️ <b>Cheksiz yuklash:</b> Kunlik 3 ta video cheklovi butunlay o'chadi!",
+        parse_mode="HTML"
+    )
+    
+    # Invoys yuborish
+    await message.answer_invoice(
+        title="Premium obuna",
+        description="Tezkor tezlik va reklamalarsiz cheksiz yuklash.",
+        payload="premium_30_days",
+        provider_token="",  # Stars uchun bo'sh qoladi
+        currency="XTR",     # Telegram Stars
+        prices=[LabeledPrice(label="Premium 1 oy", amount=50)] # 50 yulduzcha
+    )
+
+@dp.pre_checkout_query()
+async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery):
+    await pre_checkout_query.answer(ok=True)
+
+@dp.message(F.successful_payment)
+async def success_payment_handler(message: Message):
+    if message.successful_payment.invoice_payload == "premium_30_days":
+        try:
+            sql.execute("UPDATE users SET status='premium' WHERE user_id=?", (message.from_user.id,))
+            db.commit()
+            await message.answer("🎉 <b>Tabriklaymiz! Premium status muvaffaqiyatli faollashtirildi!</b>", parse_mode="HTML")
+        except Exception as e:
+            await message.answer(f"❌ Xatolik yuz berdi, adminga yozing: {e}")
+
+# =====================================
+# 3. LINK KELGANDA (LIMIT VA PREM TEKSHIRUVI)
 # =====================================
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
+    user_id = message.from_user.id
     current_time = get_uzb_time(with_seconds=True)
     user_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
+    # Limitni tekshirish
+    allowed, status = check_and_update_limit(user_id)
+    is_premium = (status == "premium")
+    
+    if not allowed:
+        await message.answer("❌ <b>Kunlik tekin yuklash limitingiz (3 ta) tugadi!</b>\n\nCheksiz foydalanish uchun Premium xizmatini faollashtiring:", parse_mode="HTML")
+        await send_premium_invoice(message)
+        return
+    
     if message.from_user.id != ADMIN_ID:
         report_msg = (
-            f"📥 <b>Botdan foydalanildi!</b>\n\n"
+            f"📥 <b>Botdan foydalanildi!</b> ({status.upper()})\n\n"
             f"👤 <b>Kim:</b> {user_name} ({username})\n"
             f"🕒 <b>Vaqt:</b> {current_time}\n"
             f"🔗 <b>Link:</b> {message.text}"
@@ -163,10 +277,14 @@ async def handle_link(message: Message):
 
     msg = await message.answer("⏳ Navbatga qo'shildi, yuklanmoqda...")
     try:
+        # Tekin foydalanuvchilar tezlik farqini bilishi uchun 3 soniya sun'iy kuttirish
+        if not is_premium:
+            await asyncio.sleep(3)
+            
         loop = asyncio.get_event_loop()
         path = await loop.run_in_executor(None, download_insta, message.text)
         await msg.edit_text("✅ Yuklandi! Yuborilmoqda...")
-        await send_file(message.chat.id, path)
+        await send_file(message.chat.id, path, is_premium=is_premium)
         await msg.delete()
     except Exception as e:
         await msg.edit_text(f"❌ Xato: {e}")
@@ -185,3 +303,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
