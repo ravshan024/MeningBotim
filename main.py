@@ -15,7 +15,7 @@ import yt_dlp
 # SOZLAMALAR (CONFIG)
 # =====================================
 # DIQQAT: Agar xato yana takrorlansa, @BotFather-dan yangi token olib shu yerga qo'ying!
-BOT_TOKEN = "8926119680:AAELFYwSVdryZ9Uhpn4ikLV6I2qBJDzQsTE"
+BOT_TOKEN = "8926119680:AAHySqTa6UqwZ8MteFsVGynHMtOCYAeV4zA"
 ADMIN_ID = 6489364078  
 DOWNLOADS_DIR = "downloads"
 TG_MAX_SIZE = 50 * 1024 * 1024  
