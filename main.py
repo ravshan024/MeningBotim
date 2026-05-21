@@ -2,10 +2,12 @@ import os
 import sqlite3
 import asyncio
 import logging
-import datetime  # To'liq datetime import qilindi (eng xavfsiz yo'li)
+import datetime
 
+# Aiogram importlarini eng xavfsiz va toza holatga keltirdik
+import aiogram
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, LabeledPrice, PreCheckoutQuery
+from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from aiohttp import web
 import yt_dlp
@@ -28,7 +30,6 @@ dp = Dispatcher()
 # O'ZBEKISTON VAQTINI OLISH FUNKSIYASI
 # =====================================
 def get_uzb_time(with_seconds=True):
-    # Server vaqtiga 5 soat qo'shib O'zbekiston vaqtini aniqlaymiz
     tz = datetime.timezone(datetime.timedelta(hours=5))
     if with_seconds:
         return datetime.datetime.now(tz).strftime("%d.%m.%Y %H:%M:%S")
@@ -39,19 +40,25 @@ def get_uzb_date():
     return datetime.datetime.now(tz).strftime("%d.%m.%Y")
 
 # =====================================
-# MA'LUMOTLAR BAZASI (DATABASE YANGILANDI)
+# MA'LUMOTLAR BAZASI (DATABASE)
 # =====================================
 db = sqlite3.connect("users.db")
 sql = db.cursor()
 sql.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, full_name TEXT, username TEXT, join_date TEXT)")
 
-# Yangi ustunlarni bazaga xavfsiz qo'shish (agar oldin bo'lmasa)
+# Yangi ustunlarni tekshirib qo'shish
 try:
     sql.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'bepul'")
+except sqlite3.OperationalError:
+    pass
+try:
     sql.execute("ALTER TABLE users ADD COLUMN daily_count INTEGER DEFAULT 0")
+except sqlite3.OperationalError:
+    pass
+try:
     sql.execute("ALTER TABLE users ADD COLUMN last_active_date TEXT DEFAULT ''")
 except sqlite3.OperationalError:
-    pass # Ustunlar allaqachon mavjud bo'lsa xatoni o'tkazib yuboradi
+    pass
 db.commit()
 
 def save_user(user):
@@ -74,11 +81,9 @@ def check_and_update_limit(user_id):
         return True, "bepul"
         
     status, daily_count, last_active_date = res
-    
     if status == 'premium':
         return True, "premium"
         
-    # Yangi kun kelganda limitni yangilash
     if last_active_date != current_date:
         sql.execute("UPDATE users SET daily_count = 1, last_active_date = ? WHERE user_id = ?", (current_date, user_id))
         db.commit()
@@ -92,7 +97,7 @@ def check_and_update_limit(user_id):
     return True, "bepul"
 
 # =====================================
-# YUKLOVCHI TIZIM (ASL HOLIDA SAQLANDI)
+# YUKLOVCHI TIZIM
 # =====================================
 def download_insta(url):
     options = {
@@ -105,12 +110,8 @@ def download_insta(url):
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-# =====================================
-# FAYLNI YUBORISH VA BO'LISH (REKLAMA QO'SHILDI)
-# =====================================
 async def send_file(chat_id, path, is_premium=False):
     size = os.path.getsize(path)
-    # Tekin foydalanuvchiga reklama, premiumga esa toza yuboriladi
     caption_text = "\n\n📥 @MeningBotim orqali yuklandi" if not is_premium else ""
     
     if size <= TG_MAX_SIZE:
@@ -140,7 +141,6 @@ async def start(message: Message):
     
     sql.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
     is_new_user = sql.fetchone() is None
-    
     save_user(message.from_user)
     
     btn = ReplyKeyboardMarkup(
@@ -167,7 +167,7 @@ async def start(message: Message):
             logging.error(f"Adminga start xabarini yuborishda xatolik: {e}")
 
 # =====================================
-# 2. STATISTIKA TUGMASI (KENGAYTIRILDI)
+# 2. STATISTIKA TUGMASI
 # =====================================
 @dp.message(F.text == "📊 Statistika")
 async def show_stats(message: Message):
@@ -176,7 +176,6 @@ async def show_stats(message: Message):
             sql.execute("SELECT COUNT(*) FROM users")
             total_users = sql.fetchone()[0]
             
-            # Oxirgi qo'shilgan 10 ta foydalanuvchini vaqti va ismi bilan olish
             sql.execute("SELECT full_name, username, join_date, status FROM users ORDER BY rowid DESC LIMIT 10")
             recent_users = sql.fetchall()
             
@@ -195,7 +194,6 @@ async def show_stats(message: Message):
         except Exception as e:
             await message.answer(f"❌ Statistikada xatolik: {e}")
     else:
-        # Oddiy userlar uchun qolgan limiti ko'rsatiladi
         sql.execute("SELECT status, daily_count FROM users WHERE user_id=?", (message.from_user.id,))
         res = sql.fetchone()
         status = res[0] if res else "bepul"
@@ -220,18 +218,20 @@ async def send_premium_invoice(message: Message):
         parse_mode="HTML"
     )
     
-    # Invoys yuborish
+    # Import muammosini oldini olish uchun LabeledPrice'ni to'g'ridan-to'g'ri chaqiramiz
+    price = aiogram.types.LabeledPrice(label="Premium 1 oy", amount=50)
+    
     await message.answer_invoice(
         title="Premium obuna",
         description="Tezkor tezlik va reklamalarsiz cheksiz yuklash.",
         payload="premium_30_days",
-        provider_token="",  # Stars uchun bo'sh qoladi
-        currency="XTR",     # Telegram Stars
-        prices=[LabeledPrice(label="Premium 1 oy", amount=50)] # 50 yulduzcha
+        provider_token="",  
+        currency="XTR",     
+        prices=[price]
     )
 
 @dp.pre_checkout_query()
-async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery):
+async def process_pre_checkout(pre_checkout_query: aiogram.types.PreCheckoutQuery):
     await pre_checkout_query.answer(ok=True)
 
 @dp.message(F.successful_payment)
@@ -242,10 +242,10 @@ async def success_payment_handler(message: Message):
             db.commit()
             await message.answer("🎉 <b>Tabriklaymiz! Premium status muvaffaqiyatli faollashtirildi!</b>", parse_mode="HTML")
         except Exception as e:
-            await message.answer(f"❌ Xatolik yuz berdi, adminga yozing: {e}")
+            await message.answer(f"❌ Xatolik yuz berdi: {e}")
 
 # =====================================
-# 3. LINK KELGANDA (LIMIT VA PREM TEKSHIRUVI)
+# 3. LINK KELGANDA
 # =====================================
 @dp.message(F.text.contains("instagram.com"))
 async def handle_link(message: Message):
@@ -254,7 +254,6 @@ async def handle_link(message: Message):
     user_name = message.from_user.full_name
     username = f"@{message.from_user.username}" if message.from_user.username else "Mavjud emas"
     
-    # Limitni tekshirish
     allowed, status = check_and_update_limit(user_id)
     is_premium = (status == "premium")
     
@@ -277,7 +276,6 @@ async def handle_link(message: Message):
 
     msg = await message.answer("⏳ Navbatga qo'shildi, yuklanmoqda...")
     try:
-        # Tekin foydalanuvchilar tezlik farqini bilishi uchun 3 soniya sun'iy kuttirish
         if not is_premium:
             await asyncio.sleep(3)
             
@@ -303,4 +301,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
