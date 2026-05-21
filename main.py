@@ -132,7 +132,7 @@ def download_insta(url):
 
 async def send_file(chat_id, path, is_premium=False):
     size = os.path.getsize(path)
-    caption_text = "\n\n📥 @MeningBotim orqali yuklandi" if not is_premium else ""
+    caption_text = "\n\n📥 @yukklovchi_bot orqali yuklandi" if not is_premium else ""
     
     if size <= TG_MAX_SIZE:
         await bot.send_video(chat_id, video=FSInputFile(path), caption=caption_text)
