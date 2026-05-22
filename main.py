@@ -310,13 +310,20 @@ async def handle_link(message: Message):
 # RENDER SERVER VA ISHGA TUSHIRISH
 # =====================================
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Mana shu qatorni tekshiring, u Telegram'dagi eski webhook bloklarini majburan o'chiradi:
+    await bot.delete_webhook(drop_pending_updates=True) 
+    
     app = web.Application()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 10000)))
     await site.start()
+    
+    # Polling boshlanishi
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
