@@ -310,16 +310,18 @@ async def handle_link(message: Message):
 # RENDER SERVER VA ISHGA TUSHIRISH
 # =====================================
 async def main():
-    # Mana shu qatorni tekshiring, u Telegram'dagi eski webhook bloklarini majburan o'chiradi:
-    await bot.delete_webhook(drop_pending_updates=True) 
+    # 1. Telegram'dagi eski webhook qoldiqlarini majburan tozalaymiz
+    await bot.delete_webhook(drop_pending_updates=True)
     
+    # 2. Render o'chib qolmasligi uchun veb-server sozlamalari
     app = web.Application()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 10000)))
     await site.start()
+    logging.info("Render yordamchi serveri 10000-portda muvaffaqiyatli ishga tushdi.")
     
-    # Polling boshlanishi
+    # 3. Botni polling rejimida ishga tushiramiz
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
