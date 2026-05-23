@@ -309,20 +309,30 @@ async def handle_link(message: Message):
 # =====================================
 # RENDER SERVER VA ISHGA TUSHIRISH
 # =====================================
+async def handle_home(request):
+    return web.Response(text="Bot muvaffaqiyatli ishlamoqda! 24/7 faol.")
+
 async def main():
-    # 1. Telegram'dagi eski webhook qoldiqlarini majburan tozalaymiz
+    # 1. Telegram'dagi eski webhook qoldiqlarini tozalaymiz
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # 2. Render o'chib qolmasligi uchun veb-server sozlamalari
+    # 2. Render va Cron-job uchun to'g'ri Web Server ochamiz
     app = web.Application()
+    
+    # MUHIM: Mana shu yerda bosh sahifa yo'lini yaratdik!
+    app.router.add_get('/', handle_home) 
+    
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 10000)))
     await site.start()
-    logging.info("Render yordamchi serveri 10000-portda muvaffaqiyatli ishga tushdi.")
+    logging.info("Render yordamchi serveri ishga tushdi.")
     
-    # 3. Botni polling rejimida ishga tushiramiz
+    # 3. Botni ishga tushirish
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
