@@ -318,9 +318,7 @@ async def main():
     
     # 2. Render va Cron-job uchun to'g'ri Web Server ochamiz
     app = web.Application()
-    
-    # MUHIM: Mana shu yerda bosh sahifa yo'lini yaratdik!
-    app.router.add_get('/', handle_home) 
+    app.router.add_get('/', handle_home) # Bosh sahifa yo'li
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -328,14 +326,8 @@ async def main():
     await site.start()
     logging.info("Render yordamchi serveri ishga tushdi.")
     
-    # 3. Botni ishga tushirish
+    # 3. Botni polling rejimida ishga tushirish
     await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
