@@ -276,7 +276,7 @@ async def handle_link(message: Message):
     allowed, status = check_and_update_limit(user_id)
     is_premium = (status == "premium")
     
-    if not allowed:
+    if not allowed:and user_id != ADMIN_ID
         await message.answer("❌ <b>Kunlik tekin yuklash limitingiz (3 ta) tugadi!</b>\n\nCheksiz foydalanish uchun Premium xizmatini faollashtiring:", parse_mode="HTML")
         await send_premium_invoice(message)
         return
